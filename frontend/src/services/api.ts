@@ -1,6 +1,6 @@
-import axios from "axios";
-import type { AxiosInstance, InternalAxiosRequestConfig } from "axios";
-import { config } from "../config";
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import type { InternalAxiosRequestConfig } from "axios";
+import config from "../config";
 
 // API Base URL - from central configuration
 const API_BASE_URL = config.api.baseURL;

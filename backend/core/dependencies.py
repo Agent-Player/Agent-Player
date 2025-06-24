@@ -10,7 +10,11 @@ from config.database import db
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """Get current authenticated user from JWT token"""
+    print(f"🔐 AUTH DEBUG: Starting authentication check")
+    print(f"🔐 AUTH DEBUG: Authorization header: {authorization[:50] if authorization else 'None'}...")
+    
     if not authorization:
+        print(f"🔐 AUTH DEBUG: No authorization header provided")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization header missing",
@@ -19,14 +23,19 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
     
     try:
         # Extract token from "Bearer <token>"
+        print(f"🔐 AUTH DEBUG: Parsing authorization header...")
         scheme, token = authorization.split()
+        print(f"🔐 AUTH DEBUG: Scheme: {scheme}, Token: {token[:30]}...")
+        
         if scheme.lower() != "bearer":
+            print(f"🔐 AUTH DEBUG: Invalid scheme: {scheme}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication scheme",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-    except ValueError:
+    except ValueError as e:
+        print(f"🔐 AUTH DEBUG: Error parsing header: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization header format",
@@ -34,8 +43,16 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
         )
     
     # Verify token
-    user_data = security.get_user_from_token(token)
+    print(f"🔐 AUTH DEBUG: Verifying JWT token...")
+    try:
+        user_data = security.get_user_from_token(token)
+        print(f"🔐 AUTH DEBUG: Token verification result: {user_data}")
+    except Exception as e:
+        print(f"🔐 AUTH DEBUG: Token verification error: {e}")
+        user_data = None
+        
     if not user_data:
+        print(f"🔐 AUTH DEBUG: Token verification failed")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -43,15 +60,25 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
         )
     
     # Check if user exists and is active
-    query = "SELECT * FROM users WHERE id = ? AND is_active = 1"
-    users = db.execute_query(query, (user_data["user_id"],))
+    print(f"🔐 AUTH DEBUG: Checking user in database...")
+    print(f"🔐 AUTH DEBUG: Looking for user_id: {user_data.get('user_id')}")
+    
+    try:
+        query = "SELECT * FROM users WHERE id = ? AND is_active = 1"
+        users = db.execute_query(query, (user_data["user_id"],))
+        print(f"🔐 AUTH DEBUG: Database query result: {users}")
+    except Exception as e:
+        print(f"🔐 AUTH DEBUG: Database query error: {e}")
+        users = []
     
     if not users:
+        print(f"🔐 AUTH DEBUG: User not found or inactive in database")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
         )
     
+    print(f"🔐 AUTH DEBUG: Authentication successful for user: {user_data.get('email')}")
     return user_data
 
 async def get_current_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:

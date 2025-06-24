@@ -1,5 +1,10 @@
 // Workflow Execution Service
-import { BaseNodeData, NodeExecutionState, validateWorkflow } from '../pages/Board/components/nodeTypes';
+import {
+  BaseNodeData,
+  NodeExecutionState,
+  validateWorkflow,
+} from "../pages/Board/components/nodeTypes";
+import config from "../config";
 
 interface WorkflowExecutionRequest {
   agent_id: number;
@@ -29,31 +34,37 @@ interface ExecutionStatus {
   success: boolean;
   execution_id: string;
   status: string;
-  node_states?: Record<string, {
-    status: string;
-    start_time?: string;
-    end_time?: string;
-    error_message?: string;
-  }>;
+  node_states?: Record<
+    string,
+    {
+      status: string;
+      start_time?: string;
+      end_time?: string;
+      error_message?: string;
+    }
+  >;
   execution_log?: string[];
 }
 
 class WorkflowService {
-  private baseUrl = 'http://localhost:8000/api/v1';
+  private baseUrl = `${config.api.baseURL}/api/v1`;
 
   async executeWorkflow(
-    boardId: string, 
+    boardId: string,
     request: WorkflowExecutionRequest
   ): Promise<WorkflowExecutionResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/boards/${boardId}/execute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify(request)
-      });
+      const response = await fetch(
+        `${this.baseUrl}/boards/${boardId}/execute`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+          },
+          body: JSON.stringify(request),
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -61,20 +72,23 @@ class WorkflowService {
 
       return await response.json();
     } catch (error) {
-      console.error('❌ Workflow execution failed:', error);
+      console.error("❌ Workflow execution failed:", error);
       throw error;
     }
   }
 
   async validateWorkflow(boardId: string): Promise<WorkflowValidation> {
     try {
-      const response = await fetch(`${this.baseUrl}/boards/${boardId}/validate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+      const response = await fetch(
+        `${this.baseUrl}/boards/${boardId}/validate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+          },
         }
-      });
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -83,19 +97,22 @@ class WorkflowService {
       const result = await response.json();
       return result.validation;
     } catch (error) {
-      console.error('❌ Workflow validation failed:', error);
+      console.error("❌ Workflow validation failed:", error);
       throw error;
     }
   }
 
   async getExecutionStatus(executionId: string): Promise<ExecutionStatus> {
     try {
-      const response = await fetch(`${this.baseUrl}/workflow/execution/${executionId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+      const response = await fetch(
+        `${this.baseUrl}/workflow/execution/${executionId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+          },
         }
-      });
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -103,19 +120,22 @@ class WorkflowService {
 
       return await response.json();
     } catch (error) {
-      console.error('❌ Failed to get execution status:', error);
+      console.error("❌ Failed to get execution status:", error);
       throw error;
     }
   }
 
   async getExecutionHistory(boardId: string, limit = 10) {
     try {
-      const response = await fetch(`${this.baseUrl}/boards/${boardId}/executions?limit=${limit}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+      const response = await fetch(
+        `${this.baseUrl}/boards/${boardId}/executions?limit=${limit}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+          },
         }
-      });
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -123,27 +143,30 @@ class WorkflowService {
 
       return await response.json();
     } catch (error) {
-      console.error('❌ Failed to get execution history:', error);
+      console.error("❌ Failed to get execution history:", error);
       throw error;
     }
   }
 
   // Client-side workflow validation
-  validateWorkflowLocally(nodes: BaseNodeData[], edges: unknown[]): WorkflowValidation {
+  validateWorkflowLocally(
+    nodes: BaseNodeData[],
+    edges: unknown[]
+  ): WorkflowValidation {
     const validation = validateWorkflow(nodes, edges as any[]);
-    
+
     return {
       is_valid: validation.isValid,
       errors: validation.errors,
       warnings: validation.warnings,
       node_count: nodes.length,
-      edge_count: Array.isArray(edges) ? edges.length : 0
+      edge_count: Array.isArray(edges) ? edges.length : 0,
     };
   }
 
   // Real-time execution monitoring
   monitorExecution(
-    executionId: string, 
+    executionId: string,
     onUpdate: (status: ExecutionStatus) => void,
     intervalMs = 1000
   ): () => void {
@@ -153,11 +176,11 @@ class WorkflowService {
         onUpdate(status);
 
         // Stop monitoring if execution is complete
-        if (status.status === 'completed' || status.status === 'error') {
+        if (status.status === "completed" || status.status === "error") {
           clearInterval(interval);
         }
       } catch (error) {
-        console.error('❌ Error monitoring execution:', error);
+        console.error("❌ Error monitoring execution:", error);
         clearInterval(interval);
       }
     }, intervalMs);
@@ -177,9 +200,9 @@ class WorkflowService {
     try {
       // Start execution
       const result = await this.executeWorkflow(boardId, request);
-      
+
       if (!result.success) {
-        throw new Error(result.error_message || 'Workflow execution failed');
+        throw new Error(result.error_message || "Workflow execution failed");
       }
 
       // Monitor execution progress
@@ -188,28 +211,33 @@ class WorkflowService {
         (status) => {
           // Update node states
           if (status.node_states) {
-            Object.entries(status.node_states).forEach(([nodeId, nodeState]) => {
-              onNodeUpdate(nodeId, {
-                status: nodeState.status as NodeExecutionState['status'],
-                startTime: nodeState.start_time ? new Date(nodeState.start_time) : undefined,
-                endTime: nodeState.end_time ? new Date(nodeState.end_time) : undefined,
-                error: nodeState.error_message,
-                logs: status.execution_log || []
-              });
-            });
+            Object.entries(status.node_states).forEach(
+              ([nodeId, nodeState]) => {
+                onNodeUpdate(nodeId, {
+                  status: nodeState.status as NodeExecutionState["status"],
+                  startTime: nodeState.start_time
+                    ? new Date(nodeState.start_time)
+                    : undefined,
+                  endTime: nodeState.end_time
+                    ? new Date(nodeState.end_time)
+                    : undefined,
+                  error: nodeState.error_message,
+                  logs: status.execution_log || [],
+                });
+              }
+            );
           }
 
           // Check if execution is complete
-          if (status.status === 'completed') {
+          if (status.status === "completed") {
             onComplete(result);
             stopMonitoring();
-          } else if (status.status === 'error') {
-            onError(new Error('Workflow execution failed'));
+          } else if (status.status === "error") {
+            onError(new Error("Workflow execution failed"));
             stopMonitoring();
           }
         }
       );
-
     } catch (error) {
       onError(error as Error);
     }
@@ -224,24 +252,27 @@ class WorkflowService {
     // Simulate execution of each node
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
-      
+
       // Start processing
       onNodeUpdate(node.id, {
-        status: 'processing',
+        status: "processing",
         startTime: new Date(),
-        progress: 0
+        progress: 0,
       });
 
       // Simulate processing time
       const processingTime = Math.random() * 2000 + 1000; // 1-3 seconds
-      
-      await new Promise(resolve => {
+
+      await new Promise((resolve) => {
         const interval = setInterval(() => {
-          const progress = Math.min(100, Math.random() * 20 + (Date.now() % 100));
+          const progress = Math.min(
+            100,
+            Math.random() * 20 + (Date.now() % 100)
+          );
           onNodeUpdate(node.id, {
-            status: 'processing',
+            status: "processing",
             progress,
-            startTime: new Date(Date.now() - (processingTime * progress / 100))
+            startTime: new Date(Date.now() - (processingTime * progress) / 100),
           });
         }, 100);
 
@@ -253,14 +284,14 @@ class WorkflowService {
 
       // Complete processing
       onNodeUpdate(node.id, {
-        status: 'completed',
+        status: "completed",
         startTime: new Date(Date.now() - processingTime),
         endTime: new Date(),
-        progress: 100
+        progress: 100,
       });
 
       // Small delay between nodes
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
 
     onComplete();
@@ -269,4 +300,4 @@ class WorkflowService {
 
 // Export singleton instance
 export const workflowService = new WorkflowService();
-export default workflowService; 
+export default workflowService;

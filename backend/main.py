@@ -19,6 +19,11 @@ from api.auth.endpoints import router as auth_router
 from api.agents.endpoints import router as agents_router
 from api.chat.endpoints import router as chat_router
 from api.users.endpoints import router as users_router
+from api.licensing.endpoints import router as licensing_router
+from api.training_lab.endpoints import router as training_lab_router  
+from api.marketplace.endpoints import router as marketplace_router
+from api.workflows.endpoints import router as workflows_router
+from api.tasks.endpoints import router as tasks_router
 
 # Configure logging
 logging.basicConfig(
@@ -65,12 +70,22 @@ app.include_router(auth_router)
 app.include_router(agents_router)
 app.include_router(chat_router)
 app.include_router(users_router)
+app.include_router(licensing_router)
+app.include_router(training_lab_router)
+app.include_router(marketplace_router)
+app.include_router(workflows_router)
+app.include_router(tasks_router)
 
 # Legacy API compatibility (v1 routes)
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(agents_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
+app.include_router(licensing_router, prefix="/api/v1")
+app.include_router(training_lab_router, prefix="/api/v1")
+app.include_router(marketplace_router, prefix="/api/v1")
+app.include_router(workflows_router, prefix="/api/v1")
+app.include_router(tasks_router, prefix="/api/v1")
 
 # Root endpoint
 @app.get("/")
@@ -109,6 +124,36 @@ async def root():
                 "settings": "GET /users/settings",
                 "activity": "GET /users/activity",
                 "admin": "GET /users/admin/all"
+            },
+            "Licensing": {
+                "validate": "POST /licensing/validate",
+                "status": "GET /licensing/status",
+                "features": "GET /licensing/features",
+                "environment": "GET /licensing/environment-check"
+            },
+            "Training Lab": {
+                "workspaces": "GET /training-lab/workspaces",
+                "create_workspace": "POST /training-lab/workspaces",
+                "test_workspace": "POST /training-lab/workspaces/{id}/test",
+                "analytics": "GET /training-lab/analytics"
+            },
+            "Marketplace": {
+                "items": "GET /marketplace/items",
+                "categories": "GET /marketplace/categories",
+                "featured": "GET /marketplace/featured",
+                "purchase": "POST /marketplace/items/{id}/purchase"
+            },
+            "Workflows": {
+                "list": "GET /workflows",
+                "create": "POST /workflows",
+                "execute": "POST /workflows/{id}/execute",
+                "analytics": "GET /workflows/analytics"
+            },
+            "Tasks": {
+                "list": "GET /tasks",
+                "create": "POST /tasks",
+                "details": "GET /tasks/{id}",
+                "analytics": "GET /tasks/analytics"
             }
         },
         "legacy_api": {

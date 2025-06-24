@@ -15,6 +15,9 @@ export { default as childAgentsService } from "./childAgents";
 export { default as mcpService } from "./mcp";
 export { default as workflowsService } from "./workflows";
 export { default as websocketService } from "./websocket";
+export { licenseService } from "./license";
+export { trainingLabService } from "./trainingLab";
+export { marketplaceService } from "./marketplace";
 
 // Export enums as values (not types)
 export { TaskStatus, TaskPriority } from "./tasks";
@@ -122,3 +125,37 @@ export type {
   TypingIndicator,
   WSEventType,
 } from "./websocket";
+
+// Training Lab types
+export type {
+  TrainingWorkspace,
+  TrainingSession,
+  TrainingAnalytics,
+  TrainingTemplate,
+  WorkspaceTestResult,
+  LLMConfig,
+  TrainingWorkflow,
+} from "../types/trainingLab";
+
+// Marketplace types
+export type {
+  MarketplaceItem,
+  MarketplaceCategory,
+  MarketplaceReview,
+  MarketplacePurchase,
+  MarketplaceSearch,
+  MarketplaceStats,
+  SellerAnalytics,
+} from "../types/marketplace";
+
+// License types (from existing license types)
+export type {
+  License,
+  LicenseInfo,
+  LicenseActivation,
+  OnlineLicenseRequest,
+  OnlineLicenseResponse,
+  LicenseValidation,
+  LicenseStats,
+  LicenseStatus,
+} from "../types/license";

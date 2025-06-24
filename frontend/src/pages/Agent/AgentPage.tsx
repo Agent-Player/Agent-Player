@@ -83,9 +83,12 @@ const AgentPage: React.FC = () => {
       // Debug logging
       console.log('🔍 Main Agents API Response:', mainAgentsData);
       console.log('🔍 Main Agents Data Array:', mainAgentsData.data);
-      console.log('🔍 Main Agents Data Length:', mainAgentsData.data?.length);
+      // Extract agents array safely
+      const mainAgentsArray = (mainAgentsData.data?.agents || []);
+      console.log('🔍 Main Agents Array:', mainAgentsArray);
+      console.log('🔍 Main Agents Data Length:', mainAgentsArray.length);
       
-      const mainAgents = (mainAgentsData.data || []).map((agent: { 
+      const mainAgents = mainAgentsArray.map((agent: { 
         id: number; 
         name: string; 
         description?: string; 
@@ -114,9 +117,12 @@ const AgentPage: React.FC = () => {
       // Debug logging
       console.log('🔍 Child Agents API Response:', childAgentsData);
       console.log('🔍 Child Agents Data Array:', childAgentsData.data);
-      console.log('🔍 Child Agents Data Length:', childAgentsData.data?.length);
+      // Extract agents array safely
+      const childAgentsArray = (childAgentsData.data?.agents || []);
+      console.log('🔍 Child Agents Array:', childAgentsArray);
+      console.log('🔍 Child Agents Data Length:', childAgentsArray.length);
       
-      const childAgents = (childAgentsData.data || []).map((agent: { 
+      const childAgents = childAgentsArray.map((agent: { 
         id: number; 
         name: string; 
         description?: string; 
@@ -618,18 +624,27 @@ const AgentPage: React.FC = () => {
       'Delete Agent',
       async () => {
         try {
-                     // Call API to delete agent
-           if (isChild) {
-             const deleteUrl = configUtils.getApiUrl(`/api/v1/child-agents/${agentData.id}`);
-             await fetch(deleteUrl, {
-               method: 'DELETE',
-             });
-           } else {
-             const deleteUrl = configUtils.getApiUrl(`/api/v1/agents/${agentData.id}`);
-             await fetch(deleteUrl, {
-               method: 'DELETE',
-             });
-           }
+          // Call API to delete agent
+          const token = localStorage.getItem('access_token');
+          if (isChild) {
+            const deleteUrl = configUtils.getApiUrl(`/api/v1/child-agents/${agentData.id}`);
+            await fetch(deleteUrl, {
+              method: 'DELETE',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+          } else {
+            const deleteUrl = configUtils.getApiUrl(`/api/v1/agents/${agentData.id}`);
+            await fetch(deleteUrl, {
+              method: 'DELETE',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+          }
 
           // Reload agents from API
           await loadAgents();
@@ -638,11 +653,17 @@ const AgentPage: React.FC = () => {
             'Agent Deleted',
             `"${agentData.name}" has been removed successfully.`
           );
-        } catch (error) {
+        } catch (error: unknown) {
           console.error('Error deleting agent:', error);
+          let errorMessage = 'Unknown error';
+          if (typeof error === 'object' && error !== null && 'message' in error) {
+            errorMessage = (error as { message?: string }).message || errorMessage;
+          } else if (typeof error === 'string') {
+            errorMessage = error;
+          }
           showError(
             'Error Deleting Agent',
-            `Failed to delete "${agentData.name}": ${error instanceof Error ? error.message : 'Unknown error'}`
+            `Failed to delete "${agentData.name}": ${errorMessage}`
           );
         }
       }

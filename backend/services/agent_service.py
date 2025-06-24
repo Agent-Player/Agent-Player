@@ -5,6 +5,7 @@ Simplified agent management service
 
 from typing import Dict, Any, Optional, List
 from config.database import db
+import requests
 
 class AgentService:
     """Agent management service"""
@@ -33,11 +34,27 @@ class AgentService:
         agents = self.db.execute_query(query, (agent_id,))
         return agents[0] if agents else None
     
+    def _validate_openai_key(self, api_key: str) -> bool:
+        """Validate OpenAI API key by calling OpenAI API"""
+        if not api_key or not api_key.startswith("sk-"):
+            return False
+        try:
+            headers = {"Authorization": f"Bearer {api_key}"}
+            response = requests.get("https://api.openai.com/v1/models", headers=headers, timeout=5)
+            return response.status_code == 200
+        except Exception:
+            return False
+    
     def create_agent(self, name: str, description: str, agent_type: str,
                     model_provider: str, model_name: str, system_prompt: str,
                     temperature: float, max_tokens: int, api_key: str,
                     parent_agent_id: int, user_id: int) -> int:
-        """Create new agent"""
+        """Create new agent with API key validation"""
+        # Validate API key for OpenAI
+        if model_provider == "openai":
+            if not self._validate_openai_key(api_key):
+                raise Exception("Invalid OpenAI API Key. Please provide a valid key.")
+        # TODO: Add validation for other providers if needed
         query = """
         INSERT INTO agents (name, description, agent_type, model_provider, model_name,
                            system_prompt, temperature, max_tokens, api_key,
@@ -60,7 +77,14 @@ class AgentService:
         return result > 0
     
     def test_agent(self, agent_id: int, test_message: str) -> Dict[str, Any]:
-        """Test agent with a message"""
+        """Test agent with a message and validate API key if needed"""
+        agent = self.get_agent_by_id(agent_id)
+        if not agent:
+            return {"status": "error", "message": "Agent not found"}
+        if agent.get("model_provider") == "openai":
+            if not self._validate_openai_key(agent.get("api_key")):
+                return {"status": "error", "message": "Invalid OpenAI API Key. Please update your key."}
+        # Here you would call the real LLM API if needed
         return {"status": "success", "message": "Agent test completed"}
     
     def get_agent_statistics(self) -> Dict[str, Any]:

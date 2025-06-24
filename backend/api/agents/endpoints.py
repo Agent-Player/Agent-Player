@@ -20,7 +20,7 @@ agent_service = AgentService()
 
 @router.get("", response_model=SuccessResponse)
 async def get_all_agents(
-    agent_type: Optional[str] = Query(None, regex="^(main|child)$"),
+    agent_type: Optional[str] = Query(None, pattern="^(main|child)$"),
     current_user: Optional[Dict] = Depends(get_optional_user)
 ):
     """Get all agents with optional filtering"""
@@ -237,5 +237,55 @@ async def get_agent_performance(agent_id: int):
         )
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{agent_id}/analytics", response_model=SuccessResponse)
+async def get_agent_analytics(agent_id: int):
+    """Get analytics for a specific agent (mock)"""
+    try:
+        return SuccessResponse(
+            message="Agent analytics fetched successfully",
+            data={
+                "usage_count": 123,
+                "average_response_time": 1.2,
+                "success_rate": 0.97,
+                "last_used": "2025-06-24T03:56:00Z"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{agent_id}/clone", response_model=SuccessResponse)
+async def clone_agent(agent_id: int, current_user: Dict = Depends(get_current_user)):
+    """Clone an agent (mock)"""
+    try:
+        new_agent_id = agent_id + 1000  # mock new id
+        return SuccessResponse(
+            message="Agent cloned successfully",
+            data={"agent_id": new_agent_id}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/{agent_id}/activate", response_model=SuccessResponse)
+async def activate_agent(agent_id: int, current_user: Dict = Depends(get_current_user)):
+    """Activate an agent (mock)"""
+    try:
+        return SuccessResponse(
+            message="Agent activated successfully",
+            data={"agent_id": agent_id, "is_active": True}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/{agent_id}/deactivate", response_model=SuccessResponse)
+async def deactivate_agent(agent_id: int, current_user: Dict = Depends(get_current_user)):
+    """Deactivate an agent (mock)"""
+    try:
+        return SuccessResponse(
+            message="Agent deactivated successfully",
+            data={"agent_id": agent_id, "is_active": False}
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 

@@ -8,8 +8,8 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showRegister, setShowRegister] = useState(false);
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
+    email: 'me@alarade.at',
+    password: 'admin123456',
     username: '',
     full_name: ''
   });
@@ -233,7 +233,7 @@ const LoginPage: React.FC = () => {
             onClick={() => {
               setShowRegister(!showRegister);
               setError(null);
-              setFormData({ email: '', password: '', username: '', full_name: '' });
+              setFormData({ email: 'me@alarade.at', password: 'admin123456', username: '', full_name: '' });
             }}
             style={{
               background: 'none',

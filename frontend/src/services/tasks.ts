@@ -1,12 +1,13 @@
 import api from "./api";
 
-// Types for tasks
+// Types for tasks - Updated to match backend API
 export const TaskStatus = {
-  PENDING: "pending",
-  RUNNING: "running",
+  TODO: "todo",
+  IN_PROGRESS: "in_progress",
+  UNDER_REVIEW: "under_review",
   COMPLETED: "completed",
-  FAILED: "failed",
   CANCELLED: "cancelled",
+  ON_HOLD: "on_hold",
 } as const;
 
 export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
@@ -27,18 +28,38 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   progress: number;
-  agent_id?: number;
-  board_id?: number;
-  task_metadata?: Record<string, any>;
-  execution_details?: Record<string, any>;
-  error_message?: string;
-  started_at?: string;
-  completed_at?: string;
+
+  // Assignment
+  assigned_to_user_id?: number;
+  assigned_to_agent_id?: number;
+  created_by_user_id: number;
+
+  // Categorization
+  category?: string;
+  tags: string[];
+
+  // Timing
+  due_date?: string;
   estimated_duration?: number;
   actual_duration?: number;
+  started_at?: string;
+  completed_at?: string;
+
+  // Task data
+  task_data?: Record<string, any>;
+  requirements?: Record<string, any>;
+  deliverables?: Record<string, any>;
+
+  // Relationships
+  parent_task_id?: number;
+  dependencies: number[];
+
+  // Collaboration
+  is_collaborative: boolean;
+  team_id?: number;
+
   created_at: string;
   updated_at: string;
-  user_id: number;
 }
 
 export interface CreateTaskRequest {
@@ -194,6 +215,125 @@ class TasksService {
     const response = await api.post(`/tasks/${id}/duplicate`, {
       title: newTitle,
     });
+    return response.data;
+  }
+
+  // NEW ENDPOINTS - Updated to match backend API
+
+  // Comments
+  async addComment(taskId: number, comment: string): Promise<any> {
+    const response = await api.post(`/tasks/${taskId}/comments`, { comment });
+    return response.data;
+  }
+
+  async getComments(
+    taskId: number,
+    params?: { skip?: number; limit?: number }
+  ): Promise<any> {
+    const response = await api.get(`/tasks/${taskId}/comments`, { params });
+    return response.data;
+  }
+
+  // Task Assignment
+  async assignTask(
+    taskId: number,
+    assignmentData: {
+      assigned_to_user_id?: number;
+      assigned_to_agent_id?: number;
+      due_date?: string;
+      priority?: TaskPriority;
+    }
+  ): Promise<Task> {
+    const response = await api.post(`/tasks/${taskId}/assign`, assignmentData);
+    return response.data;
+  }
+
+  // Time Logging
+  async logTime(
+    taskId: number,
+    timeData: {
+      hours: number;
+      description?: string;
+      log_date?: string;
+    }
+  ): Promise<any> {
+    const response = await api.post(`/tasks/${taskId}/time-logs`, timeData);
+    return response.data;
+  }
+
+  async getTimeLogs(
+    taskId: number,
+    params?: { skip?: number; limit?: number }
+  ): Promise<any> {
+    const response = await api.get(`/tasks/${taskId}/time-logs`, { params });
+    return response.data;
+  }
+
+  // Analytics
+  async getAnalytics(
+    timeframe?: string,
+    filters?: Record<string, any>
+  ): Promise<any> {
+    const params = { timeframe, ...filters };
+    const response = await api.get("/tasks/analytics", { params });
+    return response.data;
+  }
+
+  // User's Tasks
+  async getMyTasks(params?: {
+    status?: TaskStatus;
+    priority?: TaskPriority;
+    due_date_filter?: "overdue" | "today" | "this_week" | "this_month";
+    skip?: number;
+    limit?: number;
+  }): Promise<any> {
+    const response = await api.get("/tasks/my-tasks", { params });
+    return response.data;
+  }
+
+  // Task Dependencies
+  async addDependency(taskId: number, dependsOnTaskId: number): Promise<void> {
+    await api.post(`/tasks/${taskId}/dependencies`, {
+      depends_on_task_id: dependsOnTaskId,
+    });
+  }
+
+  async removeDependency(taskId: number, dependencyId: number): Promise<void> {
+    await api.delete(`/tasks/${taskId}/dependencies/${dependencyId}`);
+  }
+
+  // Task Templates
+  async createTemplate(
+    taskId: number,
+    templateData: {
+      name: string;
+      description?: string;
+      category?: string;
+    }
+  ): Promise<any> {
+    const response = await api.post(`/tasks/${taskId}/template`, templateData);
+    return response.data;
+  }
+
+  async getTemplates(category?: string): Promise<any> {
+    const params = category ? { category } : {};
+    const response = await api.get("/tasks/templates", { params });
+    return response.data;
+  }
+
+  async createFromTemplate(
+    templateId: number,
+    taskData: {
+      title: string;
+      assigned_to_user_id?: number;
+      assigned_to_agent_id?: number;
+      due_date?: string;
+    }
+  ): Promise<Task> {
+    const response = await api.post(
+      `/tasks/templates/${templateId}/create`,
+      taskData
+    );
     return response.data;
   }
 }

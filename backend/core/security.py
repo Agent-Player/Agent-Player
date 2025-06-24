@@ -56,7 +56,7 @@ class SecurityManager:
             return payload
         except jwt.ExpiredSignatureError:
             return None
-        except jwt.JWTError:
+        except jwt.PyJWTError:
             return None
     
     def get_user_from_token(self, token: str) -> Optional[Dict[str, Any]]:

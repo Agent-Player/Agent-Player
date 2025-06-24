@@ -52,6 +52,9 @@ class AuthService:
             self._log_activity(user["id"], "login", "User logged in successfully")
             
             return {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "bearer",
                 "user": {
                     "id": user["id"],
                     "email": user["email"],
@@ -59,6 +62,7 @@ class AuthService:
                     "full_name": user["full_name"],
                     "role": user["role"]
                 },
+                # For backward compatibility
                 "tokens": {
                     "access_token": access_token,
                     "refresh_token": refresh_token,

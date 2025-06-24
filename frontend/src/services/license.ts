@@ -186,4 +186,59 @@ export const licenseService = {
 
     return Math.abs(hash).toString(16);
   },
+
+  // NEW LICENSING API ENDPOINTS - Updated for Backend Integration
+
+  // Environment and Deployment
+  async checkEnvironment() {
+    const response = await api.get("/licensing/environment-check");
+    return response.data;
+  },
+
+  async getHardwareInfo() {
+    const response = await api.get("/licensing/hardware-info");
+    return response.data;
+  },
+
+  async checkDeploymentReadiness() {
+    const response = await api.post("/licensing/deployment-check");
+    return response.data;
+  },
+
+  async getDeploymentGuide() {
+    const response = await api.get("/licensing/deployment-guide");
+    return response.data;
+  },
+
+  // Updated License Validation
+  async validateLicenseKey(licenseData: {
+    license_key: string;
+    hardware_fingerprint: string;
+    device_info: any;
+  }) {
+    const response = await api.post("/licensing/validate", licenseData);
+    return response.data;
+  },
+
+  // Updated License Status
+  async getLicenseStatus() {
+    const response = await api.get("/licensing/status");
+    return response.data;
+  },
+
+  // Updated License Activation
+  async activateLicenseKey(activationData: {
+    license_key: string;
+    device_name: string;
+    device_info: any;
+  }) {
+    const response = await api.post("/licensing/activate", activationData);
+    return response.data;
+  },
+
+  // Get Available Features
+  async getAvailableFeatures() {
+    const response = await api.get("/licensing/features");
+    return response.data;
+  },
 };

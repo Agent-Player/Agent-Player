@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import config from '../../../config';
 
 const AccountSecurityComponent: React.FC = () => {
   const [securityData, setSecurityData] = useState({
@@ -19,7 +20,7 @@ const AccountSecurityComponent: React.FC = () => {
 
   const loadSecuritySettings = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/settings/account-security');
+      const response = await fetch(`${config.api.baseURL}/api/v1/settings/account-security`);
       if (response.ok) {
         const data = await response.json();
         setSecurityData(data);
@@ -38,7 +39,7 @@ const AccountSecurityComponent: React.FC = () => {
     setMessage('');
     
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/settings/account-security', {
+      const response = await fetch(`${config.api.baseURL}/api/v1/settings/account-security`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(securityData)

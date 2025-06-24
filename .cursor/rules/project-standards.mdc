@@ -1,0 +1,98 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Rules File Format
+
+- All documentation and text files in the rules directory must use the `.mdc` extension (not `.md`).
+- This ensures consistency and makes it easy to identify official rules and standards files.
+
+# Language & Communication
+
+- You may explain rules or instructions in Arabic for clarity and understanding (outside the codebase only).
+- **However, all code, file names, code comments, and commit messages must be written in English only.**
+- No Arabic is allowed inside code files, comments, commit messages, or any technical implementation.
+- This ensures codebase consistency and international collaboration.
+
+---
+
+- You may explain rules or instructions in Arabic for clarity and understanding.
+- **However, all code, file names, code comments, and commit messages must be written in English only.**
+- No Arabic is allowed inside code files, comments, or any technical implementation.
+- This ensures codebase consistency and international collaboration.
+
+# Endpoint Testing Rule
+
+- Every API endpoint must be fully tested for all available scenarios: success, failure, edge cases, and invalid input.
+- An endpoint is only considered 'complete' if it returns the correct response (success or error) for every possible case (create, update, delete, fetch, etc.).
+- Automated or documented manual tests must be performed for each endpoint before marking it as finished.
+- Testing results and coverage should be documented in the project (e.g., in a dedicated testing folder or documentation file).
+
+# Library and Dependency Documentation Rule
+
+- Every time a new library or package is added to the backend or frontend, you must document:
+  - The library/package name
+  - The version used
+  - The purpose of the library (why it is used)
+  - Where it is used in the codebase (file/module/component)
+- This documentation must be kept up to date in the rules directory (e.g., in a dedicated section or file).
+- This information is critical for LLMs and future developers to understand the codebase and dependencies.
+
+# Backend Testing Location
+
+- All backend tests and experiments must be placed in the directory: `backend/test`
+- This is the official location for backend API and logic testing.
+
+# Command-Line Testing Rule (Windows)
+
+- All command-line testing and documentation must use Windows-compatible commands, since the development environment is Windows.
+- For example, `curl -X ...` may not work as expected in Windows PowerShell because it is an alias for `Invoke-WebRequest` and does not support Unix-style flags.
+- Prefer using Python scripts (with the `requests` library) or PowerShell's `Invoke-WebRequest`/`Invoke-RestMethod` for API testing and automation.
+- Always document the exact command or script used for testing in the documentation.
+
+## Backend Testing and Initialization
+- All backend test scripts must use a known admin user (default: email `me@alarade.at`, password `admin123456`).
+- If the admin user does not exist, a script must be provided to create or reset the admin user with these credentials.
+- All test scripts must be updated if the default credentials change.
+- Document any changes to test user credentials in this file and in the test script headers.
+
+## Backend API Final Status (June 2025)
+- All backend APIs (Auth, Agents, Chat, Users, Licensing, Training Lab, Marketplace, Workflows, Tasks) are 100% working and fully tested.
+- All endpoints are covered by automated test scripts in `docs/api-testing/`.
+- Any endpoints not implemented are not in the OpenAPI spec and are documented in the test summary.
+- Default admin credentials for all backend tests: email `me@alarade.at`, password `admin123456`.
+- All test scripts must use these credentials and be updated if they change.
+- All changes, fixes, and test results must be documented in the task and rules files.
+
+## API Testing and Documentation
+- Every API endpoint must be tested for all scenarios (success, failure, edge cases).
+- Test results are documented in `docs/api-testing/TESTING_SUMMARY.mdc` and per-API files.
+- All backend code, comments, and documentation must be in English only.
+- All backend APIs are now production-ready and fully integrated with the frontend.
+
+# Bug Handling and Self-Healing Rule
+- If the user reports a bug, error, or frontend/backend issue, you must:
+  1. Investigate and reproduce the issue yourself.
+  2. Search the codebase for the root cause.
+  3. Apply the fix directly to the relevant files (backend or frontend).
+  4. Test the fix yourself to confirm the issue is resolved.
+  5. Update all relevant rules, documentation, and task files after every fix.
+- This workflow is MANDATORY for all future development and maintenance.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

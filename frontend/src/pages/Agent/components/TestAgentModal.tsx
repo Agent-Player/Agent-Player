@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import config from '../../../config';
 
 interface TestAgentModalProps {
   isOpen: boolean;
@@ -62,10 +63,12 @@ const TestAgentModal: React.FC<TestAgentModalProps> = ({
         requestBody.openai_api_key = openaiKey;
       }
 
-      const response = await fetch(`http://localhost:8000/api/v1/agents/${agentId}/test`, {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${config.api.baseURL}/api/v1/agents/${agentId}/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(requestBody)
       });

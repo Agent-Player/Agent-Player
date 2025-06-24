@@ -3,13 +3,15 @@ import { Link, useLocation } from 'react-router-dom';
 import { authService } from '../../services/auth';
 import type { User } from '../../services/auth';
 
-// Main navigation items - with Chat restored
+// Main navigation items - with Chat restored and new features
 const navigationItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
   { path: '/dashboard/agents', label: 'Agents', icon: '🤖' },
   { path: '/dashboard/chat', label: 'Chat', icon: '💬' },
-  { path: '/dashboard/form-builder', label: 'Form Builder', icon: '📝' },
+  { path: '/dashboard/training-lab', label: 'Training Lab', icon: '🧪' },
+  { path: '/dashboard/workflows', label: 'Workflows', icon: '⚡' },
   { path: '/dashboard/tasks', label: 'Tasks', icon: '✅' },
+  { path: '/dashboard/form-builder', label: 'Form Builder', icon: '📝' },
   { path: '/dashboard/marketplace', label: 'Marketplace', icon: '🛒' },
   { path: '/dashboard/settings', label: 'Settings', icon: '⚙️' },
 ];

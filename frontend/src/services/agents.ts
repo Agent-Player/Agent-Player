@@ -1,5 +1,5 @@
 import api from "./api";
-import type { Agent, CreateAgentData } from "../types";
+import type { Agent } from "../types";
 
 // Configuration - Updated to use new API structure
 const AGENTS_ENDPOINTS = {
@@ -16,16 +16,37 @@ const AGENTS_ENDPOINTS = {
   statistics: "/agents/statistics/overview",
 } as const;
 
+// Define agent creation data type
+interface CreateAgentData {
+  name: string;
+  description?: string;
+  agent_type?: string;
+  model_provider?: string;
+  model_name?: string;
+  system_prompt?: string;
+  temperature?: number;
+  max_tokens?: number;
+  api_key?: string;
+  configuration?: any;
+  is_active?: boolean;
+}
+
 // Helper function to handle both old and new response formats
 function extractData<T>(response: any): T[] {
   // If response has 'success' and 'data' properties (new format)
   if (response && response.success && response.data) {
-    return Array.isArray(response.data) ? response.data : [];
+    if (Array.isArray(response.data)) return response.data;
+    if (response.data.agents && Array.isArray(response.data.agents))
+      return response.data.agents;
+    return [];
   }
 
   // If response has 'data' property (standard format)
   if (response && typeof response === "object" && "data" in response) {
-    return Array.isArray(response.data) ? response.data : [];
+    if (Array.isArray(response.data)) return response.data;
+    if (response.data.agents && Array.isArray(response.data.agents))
+      return response.data.agents;
+    return [];
   }
 
   // If response is directly an array (old format)
@@ -106,14 +127,22 @@ export const agentsService = {
           error: response.data.message || "Failed to create agent",
         };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("❌ Error creating agent:", error);
+      let errorMessage = "Failed to create agent";
+      if (typeof error === "object" && error !== null) {
+        const err = error as {
+          response?: { data?: { message?: string } };
+          message?: string;
+        };
+        errorMessage =
+          err.response?.data?.message || err.message || errorMessage;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
       return {
         success: false,
-        error:
-          error.response?.data?.message ||
-          error.message ||
-          "Failed to create agent",
+        error: errorMessage,
       };
     }
   },
@@ -142,14 +171,22 @@ export const agentsService = {
           error: response.data.message || "Failed to create child agent",
         };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("❌ Error creating child agent:", error);
+      let errorMessage = "Failed to create child agent";
+      if (typeof error === "object" && error !== null) {
+        const err = error as {
+          response?: { data?: { message?: string } };
+          message?: string;
+        };
+        errorMessage =
+          err.response?.data?.message || err.message || errorMessage;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
       return {
         success: false,
-        error:
-          error.response?.data?.message ||
-          error.message ||
-          "Failed to create child agent",
+        error: errorMessage,
       };
     }
   },
@@ -159,7 +196,7 @@ export const agentsService = {
     try {
       const response = await api.get(AGENTS_ENDPOINTS.get(id));
       return response.data.data || response.data;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error getting agent:", error);
       return null;
     }
@@ -182,14 +219,22 @@ export const agentsService = {
           error: response.data.message || "Failed to update agent",
         };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error updating agent:", error);
+      let errorMessage = "Failed to update agent";
+      if (typeof error === "object" && error !== null) {
+        const err = error as {
+          response?: { data?: { message?: string } };
+          message?: string;
+        };
+        errorMessage =
+          err.response?.data?.message || err.message || errorMessage;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
       return {
         success: false,
-        error:
-          error.response?.data?.message ||
-          error.message ||
-          "Failed to update agent",
+        error: errorMessage,
       };
     }
   },
@@ -197,7 +242,12 @@ export const agentsService = {
   // Delete agent
   async deleteAgent(id: number): Promise<{ success: boolean; error?: string }> {
     try {
-      const response = await api.delete(AGENTS_ENDPOINTS.delete(id));
+      const token = localStorage.getItem("access_token");
+      const response = await api.delete(AGENTS_ENDPOINTS.delete(id), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (response.data && response.data.success !== false) {
         return { success: true };
@@ -207,14 +257,22 @@ export const agentsService = {
           error: response.data.message || "Failed to delete agent",
         };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error deleting agent:", error);
+      let errorMessage = "Failed to delete agent";
+      if (typeof error === "object" && error !== null) {
+        const err = error as {
+          response?: { data?: { message?: string } };
+          message?: string;
+        };
+        errorMessage =
+          err.response?.data?.message || err.message || errorMessage;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
       return {
         success: false,
-        error:
-          error.response?.data?.message ||
-          error.message ||
-          "Failed to delete agent",
+        error: errorMessage,
       };
     }
   },
@@ -225,7 +283,9 @@ export const agentsService = {
     testMessage?: string
   ): Promise<{ success: boolean; result?: any; error?: string }> {
     try {
-      const requestData = testMessage ? { test_message: testMessage } : {};
+      const requestData = testMessage
+        ? { message: testMessage }
+        : { message: "Hello! This is a test message." };
       const response = await api.post(AGENTS_ENDPOINTS.test(id), requestData);
 
       if (response.data && response.data.success !== false) {
@@ -236,12 +296,22 @@ export const agentsService = {
           error: response.data.message || "Agent test failed",
         };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error testing agent:", error);
+      let errorMessage = "Agent test failed";
+      if (typeof error === "object" && error !== null) {
+        const err = error as {
+          response?: { data?: { message?: string } };
+          message?: string;
+        };
+        errorMessage =
+          err.response?.data?.message || err.message || errorMessage;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
       return {
         success: false,
-        error:
-          error.response?.data?.message || error.message || "Agent test failed",
+        error: errorMessage,
       };
     }
   },
@@ -271,17 +341,24 @@ export const agentsService = {
       const duplicateData = {
         name: `${originalAgent.name} (Copy)`,
         description: originalAgent.description,
-        agent_type: originalAgent.agent_type || "main",
-        configuration: originalAgent.configuration,
+        agent_type: (originalAgent as any).agent_type || "main",
+        configuration: (originalAgent as any).configuration,
         is_active: true,
       };
 
       return await this.createAgent(duplicateData);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error duplicating agent:", error);
+      let errorMessage = "Failed to duplicate agent";
+      if (typeof error === "object" && error !== null) {
+        const err = error as { message?: string };
+        errorMessage = err.message || errorMessage;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
       return {
         success: false,
-        error: error.message || "Failed to duplicate agent",
+        error: errorMessage,
       };
     }
   },
@@ -291,7 +368,7 @@ export const agentsService = {
     try {
       const response = await api.get(AGENTS_ENDPOINTS.statistics);
       return response.data.data || response.data;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error getting agent statistics:", error);
       return {
         total_agents: 0,

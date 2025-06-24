@@ -20,6 +20,7 @@ import {
   Upload,
   FileText
 } from 'lucide-react';
+import config from '../../../config';
 
 interface SimpleChatSettingsProps {
   isOpen: boolean;
@@ -677,10 +678,10 @@ export const SimpleChatSettings: React.FC<SimpleChatSettingsProps> = ({
                 <div style={styles.settingLabel}>WebSocket Endpoint</div>
                 <div style={styles.settingDescription}>Real-time connection endpoint</div>
                 <div style={styles.codeBlock}>
-                  ws://localhost:8000/ws/chat/{conversation?.id || 'conv-1234567890'}
+                  {`${config.websocket.url}/chat/${conversation?.id || 'conv-1234567890'}`}
                   <button
                     style={styles.copyCodeButton}
-                    onClick={() => handleCopyToClipboard(`ws://localhost:8000/ws/chat/${conversation?.id || 'conv-1234567890'}`, 'ws-endpoint')}
+                    onClick={() => handleCopyToClipboard(`${config.websocket.url}/chat/${conversation?.id || 'conv-1234567890'}`, 'ws-endpoint')}
                   >
                     {copiedItems.has('ws-endpoint') ? 'Copied!' : 'Copy'}
                   </button>

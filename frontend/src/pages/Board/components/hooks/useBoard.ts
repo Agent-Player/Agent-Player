@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import config from "../../../../config";
 
 // Extend window object for board/agent IDs
 declare global {
@@ -107,7 +108,7 @@ export const useBoard = () => {
 
           // First, get boards for this child agent
           const boardsResponse = await fetch(
-            `http://localhost:8000/api/v1/boards?agent_id=${childId}`
+            `${config.api.baseURL}/api/v1/boards?agent_id=${childId}`
           );
           const boardsResult = await boardsResponse.json();
 
@@ -138,7 +139,7 @@ export const useBoard = () => {
 
             try {
               const createResponse = await fetch(
-                `http://localhost:8000/api/v1/boards`,
+                `${config.api.baseURL}/api/v1/boards`,
                 {
                   method: "POST",
                   headers: {
@@ -227,7 +228,7 @@ export const useBoard = () => {
           console.log("💾 Saving board to API:", window.boardId);
 
           const response = await fetch(
-            `http://localhost:8000/api/v1/boards/${window.boardId}`,
+            `${config.api.baseURL}/api/v1/boards/${window.boardId}`,
             {
               method: "PUT",
               headers: {

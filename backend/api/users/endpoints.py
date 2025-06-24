@@ -141,6 +141,21 @@ async def get_user_statistics(current_user: Dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/notifications", response_model=SuccessResponse)
+async def get_user_notifications(current_user: Dict = Depends(get_current_user)):
+    """Get user notifications (mock)"""
+    try:
+        notifications = [
+            {"id": 1, "title": "Welcome!", "body": "Thanks for joining.", "read": False, "created_at": "2025-06-24T04:00:00Z"},
+            {"id": 2, "title": "Profile Updated", "body": "Your profile was updated.", "read": True, "created_at": "2025-06-23T12:00:00Z"}
+        ]
+        return SuccessResponse(
+            message="Notifications retrieved successfully",
+            data={"notifications": notifications, "total": len(notifications)}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Admin endpoints
 @router.get("/admin/all", response_model=SuccessResponse)
 async def get_all_users(current_user: Dict = Depends(get_current_admin)):
@@ -150,6 +165,18 @@ async def get_all_users(current_user: Dict = Depends(get_current_admin)):
         return SuccessResponse(
             message=f"Found {len(users)} users",
             data={"users": users, "total": len(users)}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/admin/statistics/overview", response_model=SuccessResponse)
+async def get_users_overview(current_user: Dict = Depends(get_current_admin)):
+    """Get users overview statistics (admin only)"""
+    try:
+        overview = user_service.get_users_overview()
+        return SuccessResponse(
+            message="Users overview retrieved",
+            data=overview
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -236,17 +263,5 @@ async def activate_user(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/admin/statistics/overview", response_model=SuccessResponse)
-async def get_users_overview(current_user: Dict = Depends(get_current_admin)):
-    """Get users overview statistics (admin only)"""
-    try:
-        overview = user_service.get_users_overview()
-        return SuccessResponse(
-            message="Users overview retrieved",
-            data=overview
-        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 

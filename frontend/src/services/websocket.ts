@@ -1,4 +1,5 @@
 import { removeAuthToken } from "./api";
+import config from "../config";
 
 // WebSocket Event Types
 export interface WebSocketMessage {
@@ -158,7 +159,7 @@ class WebSocketService {
       }
 
       // Create WebSocket connection with auth token
-      const wsUrl = `ws://localhost:8000/api/v1/ws?token=${token}`;
+      const wsUrl = `${config.websocket.url}?token=${token}`;
       this.ws = new WebSocket(wsUrl);
 
       const connectTimeout = setTimeout(() => {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import config from '../../../config';
 
 // Privacy Controls Component
 export const PrivacyControlsComponent: React.FC = () => {
@@ -18,7 +19,7 @@ export const PrivacyControlsComponent: React.FC = () => {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/settings/privacy', {
+      const response = await fetch(`${config.api.baseURL}/api/v1/settings/privacy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(privacyData)
@@ -136,7 +137,7 @@ export const LayoutSettingsComponent: React.FC = () => {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/settings/layout', {
+      const response = await fetch(`${config.api.baseURL}/api/v1/settings/layout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(layoutData)
@@ -269,7 +270,7 @@ export const TypographyComponent: React.FC = () => {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/settings/typography', {
+      const response = await fetch(`${config.api.baseURL}/api/v1/settings/typography`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(typography)

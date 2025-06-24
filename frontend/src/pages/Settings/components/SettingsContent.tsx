@@ -25,6 +25,7 @@ import {
   DeveloperToolsComponent,
   BackupRestoreComponent
 } from './AdditionalSettingsComponents';
+import config from '../../../config';
 
 interface ProfileData {
   user_type: string;
@@ -373,7 +374,7 @@ const DynamicProfileSelector: React.FC = () => {
   const loadProfileData = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('http://127.0.0.1:8000/api/v1/settings/profile', {
+      const response = await fetch(`${config.api.baseURL}/api/v1/settings/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -408,7 +409,7 @@ const DynamicProfileSelector: React.FC = () => {
     
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('http://127.0.0.1:8000/api/v1/settings/profile', {
+      const response = await fetch(`${config.api.baseURL}/api/v1/settings/profile`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

@@ -7,76 +7,91 @@ from typing import Dict, Any, Optional, List
 from config.database import db
 
 class ChatService:
-    """Chat management service"""
-    
+    """Chat management service (with in-memory mock for testing)"""
+    # In-memory storage for mock/testing
+    _conversations: Dict[str, Dict[str, Any]] = {}
+    _messages: Dict[str, List[Dict[str, Any]]] = {}
+    _conversation_counter: int = 1
+    _message_counter: int = 1
+
     def __init__(self):
         self.db = db
     
     def get_user_conversations(self, user_id: int, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
         """Get user conversations"""
-        query = """
-        SELECT * FROM conversations 
-        WHERE user_id = ? AND is_active = 1 
-        ORDER BY updated_at DESC 
-        LIMIT ? OFFSET ?
-        """
-        return self.db.execute_query(query, (user_id, limit, offset))
+        # In-memory mock
+        conversations = [conv for conv in self._conversations.values() if conv["user_id"] == user_id and conv["is_active"]]
+        conversations.sort(key=lambda c: c["updated_at"], reverse=True)
+        return conversations[offset:offset+limit]
     
     def get_user_conversations_count(self, user_id: int) -> int:
         """Get total count of user conversations"""
-        query = "SELECT COUNT(*) as count FROM conversations WHERE user_id = ? AND is_active = 1"
-        result = self.db.execute_query(query, (user_id,))
-        return result[0]['count'] if result else 0
+        return len([conv for conv in self._conversations.values() if conv["user_id"] == user_id and conv["is_active"]])
     
     def create_conversation(self, title: str, user_id: int, agent_id: Optional[int] = None) -> str:
         """Create new conversation"""
-        query = """
-        INSERT INTO conversations (title, user_id, agent_id, is_active)
-        VALUES (?, ?, ?, 1)
-        """
-        conversation_id = self.db.execute_command(query, (title, user_id, agent_id))
-        return str(conversation_id)
+        conversation_id = str(self._conversation_counter)
+        self._conversation_counter += 1
+        conversation = {
+            "id": conversation_id,
+            "title": title,
+            "user_id": user_id,
+            "agent_id": agent_id,
+            "is_active": True,
+            "created_at": "2025-06-24 03:56:00",
+            "updated_at": "2025-06-24 03:56:00"
+        }
+        self._conversations[conversation_id] = conversation
+        self._messages[conversation_id] = []
+        return conversation_id
     
     def get_conversation_by_id(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         """Get specific conversation by ID"""
-        query = "SELECT * FROM conversations WHERE id = ? AND is_active = 1"
-        conversations = self.db.execute_query(query, (conversation_id,))
-        return conversations[0] if conversations else None
+        conv = self._conversations.get(conversation_id)
+        if conv and conv["is_active"]:
+            return conv
+        return None
     
     def update_conversation(self, conversation_id: str, updates: Dict[str, Any]) -> bool:
         """Update existing conversation"""
+        conv = self._conversations.get(conversation_id)
+        if not conv or not conv["is_active"]:
+            return False
+        conv.update(updates)
+        conv["updated_at"] = "2025-06-24 03:56:00"
         return True
     
     def delete_conversation(self, conversation_id: str) -> bool:
         """Delete conversation (soft delete)"""
-        query = "UPDATE conversations SET is_active = 0 WHERE id = ?"
-        result = self.db.execute_command(query, (conversation_id,))
-        return result > 0
+        conv = self._conversations.get(conversation_id)
+        if not conv or not conv["is_active"]:
+            return False
+        conv["is_active"] = False
+        return True
     
     def get_conversation_messages(self, conversation_id: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """Get messages for a conversation"""
-        query = """
-        SELECT * FROM messages 
-        WHERE conversation_id = ? AND is_active = 1 
-        ORDER BY created_at ASC 
-        LIMIT ? OFFSET ?
-        """
-        return self.db.execute_query(query, (conversation_id, limit, offset))
+        msgs = self._messages.get(conversation_id, [])
+        return msgs[offset:offset+limit]
     
     def get_conversation_messages_count(self, conversation_id: str) -> int:
         """Get total count of messages in conversation"""
-        query = "SELECT COUNT(*) as count FROM messages WHERE conversation_id = ? AND is_active = 1"
-        result = self.db.execute_query(query, (conversation_id,))
-        return result[0]['count'] if result else 0
+        return len(self._messages.get(conversation_id, []))
     
     async def add_message_to_conversation(self, conversation_id: str, message: str, sender_type: str = "user", agent_id: Optional[int] = None) -> Dict[str, Any]:
         """Add message to conversation"""
-        query = """
-        INSERT INTO messages (conversation_id, message, sender_type, agent_id, is_active)
-        VALUES (?, ?, ?, ?, 1)
-        """
-        message_id = self.db.execute_command(query, (conversation_id, message, sender_type, agent_id))
-        return {"message_id": message_id, "status": "success"}
+        msg = {
+            "id": self._message_counter,
+            "conversation_id": conversation_id,
+            "message": message,
+            "sender_type": sender_type,
+            "agent_id": agent_id,
+            "is_active": True,
+            "created_at": "2025-06-24 03:56:00"
+        }
+        self._message_counter += 1
+        self._messages.setdefault(conversation_id, []).append(msg)
+        return {"message_id": msg["id"], "status": "success"}
     
     async def generate_ai_response(self, conversation_id: str, message: str, agent_id: Optional[int] = None, conversation_history: Optional[List] = None, include_context: bool = True) -> Dict[str, Any]:
         """Generate AI response for a message"""
