@@ -3,7 +3,7 @@ DPRO AI Agent - Unified Server
 Single FastAPI application with organized structure
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -11,19 +11,20 @@ import logging
 from datetime import datetime
 
 # Import configuration
-from config.settings import settings, get_cors_settings
-from config.database import db
+from config.settings import settings
+from config.database import init_db, get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import API routers
 from api.auth.endpoints import router as auth_router
 from api.agents.endpoints import router as agents_router
 from api.chat.endpoints import router as chat_router
 from api.users.endpoints import router as users_router
+from api.tasks.endpoints import router as tasks_router
 from api.licensing.endpoints import router as licensing_router
-from api.training_lab.endpoints import router as training_lab_router  
+from api.training_lab.endpoints import router as training_lab_router
 from api.marketplace.endpoints import router as marketplace_router
 from api.workflows.endpoints import router as workflows_router
-from api.tasks.endpoints import router as tasks_router
 
 # Configure logging
 logging.basicConfig(
@@ -40,11 +41,13 @@ app = FastAPI(
     debug=settings.DEBUG
 )
 
-# Add CORS middleware
-cors_settings = get_cors_settings()
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    **cors_settings
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
 # Initialize database on startup
@@ -53,7 +56,7 @@ async def startup_event():
     """Initialize application on startup"""
     try:
         # Initialize database
-        db.initialize_database()
+        init_db()
         logger.info("Database initialized successfully")
         
         # Log startup info
@@ -65,110 +68,34 @@ async def startup_event():
         logger.error(f"Startup error: {e}")
         raise
 
-# Include API routers
-app.include_router(auth_router)
-app.include_router(agents_router)
-app.include_router(chat_router)
-app.include_router(users_router)
-app.include_router(licensing_router)
-app.include_router(training_lab_router)
-app.include_router(marketplace_router)
-app.include_router(workflows_router)
-app.include_router(tasks_router)
-
-# Legacy API compatibility (v1 routes)
-app.include_router(auth_router, prefix="/api/v1")
-app.include_router(agents_router, prefix="/api/v1")
-app.include_router(chat_router, prefix="/api/v1")
-app.include_router(users_router, prefix="/api/v1")
-app.include_router(licensing_router, prefix="/api/v1")
-app.include_router(training_lab_router, prefix="/api/v1")
-app.include_router(marketplace_router, prefix="/api/v1")
-app.include_router(workflows_router, prefix="/api/v1")
-app.include_router(tasks_router, prefix="/api/v1")
+# Include routers
+app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+app.include_router(agents_router, prefix="/agents", tags=["Agents"])
+app.include_router(chat_router, prefix="/chat", tags=["Chat"])
+app.include_router(users_router, prefix="/users", tags=["Users"])
+app.include_router(tasks_router, prefix="/tasks", tags=["Tasks"])
+app.include_router(licensing_router, prefix="/licensing", tags=["Licensing"])
+app.include_router(training_lab_router, prefix="/training-lab", tags=["Training Lab"])
+app.include_router(marketplace_router, prefix="/marketplace", tags=["Marketplace"])
+app.include_router(workflows_router, prefix="/workflows", tags=["Workflows"])
 
 # Root endpoint
 @app.get("/")
 async def root():
     """Application information and available routes"""
     return {
-        "application": settings.APP_NAME,
+        "message": settings.APP_NAME,
         "version": settings.VERSION,
-        "description": settings.DESCRIPTION,
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "endpoints": {
-            "Authentication": {
-                "login": "POST /auth/login",
-                "register": "POST /auth/register/admin",
-                "profile": "GET /auth/me",
-                "logout": "POST /auth/logout"
-            },
-            "Agents": {
-                "list": "GET /agents",
-                "create": "POST /agents",
-                "details": "GET /agents/{id}",
-                "update": "PUT /agents/{id}",
-                "delete": "DELETE /agents/{id}",
-                "test": "POST /agents/{id}/test"
-            },
-            "Chat": {
-                "conversations": "GET /chat/conversations",
-                "create_conversation": "POST /chat/conversations",
-                "messages": "GET /chat/conversations/{id}/messages",
-                "send_message": "POST /chat/conversations/{id}/messages",
-                "ai_response": "POST /chat/conversations/{id}/ai-response"
-            },
-            "Users": {
-                "profile": "GET /users/profile",
-                "settings": "GET /users/settings",
-                "activity": "GET /users/activity",
-                "admin": "GET /users/admin/all"
-            },
-            "Licensing": {
-                "validate": "POST /licensing/validate",
-                "status": "GET /licensing/status",
-                "features": "GET /licensing/features",
-                "environment": "GET /licensing/environment-check"
-            },
-            "Training Lab": {
-                "workspaces": "GET /training-lab/workspaces",
-                "create_workspace": "POST /training-lab/workspaces",
-                "test_workspace": "POST /training-lab/workspaces/{id}/test",
-                "analytics": "GET /training-lab/analytics"
-            },
-            "Marketplace": {
-                "items": "GET /marketplace/items",
-                "categories": "GET /marketplace/categories",
-                "featured": "GET /marketplace/featured",
-                "purchase": "POST /marketplace/items/{id}/purchase"
-            },
-            "Workflows": {
-                "list": "GET /workflows",
-                "create": "POST /workflows",
-                "execute": "POST /workflows/{id}/execute",
-                "analytics": "GET /workflows/analytics"
-            },
-            "Tasks": {
-                "list": "GET /tasks",
-                "create": "POST /tasks",
-                "details": "GET /tasks/{id}",
-                "analytics": "GET /tasks/analytics"
-            }
-        },
-        "legacy_api": {
-            "note": "All endpoints also available under /api/v1/ prefix",
-            "example": "/api/v1/auth/login"
-        }
+        "status": "operational"
     }
 
 # Health check endpoint
 @app.get("/health")
-async def health_check():
+async def health_check(db: AsyncSession = Depends(get_db)):
     """Application health check"""
     try:
         # Test database connection
-        db.execute_query("SELECT 1")
+        await db.execute("SELECT 1")
         database_status = "connected"
     except Exception:
         database_status = "disconnected"
@@ -184,13 +111,13 @@ async def health_check():
 
 # System status endpoint
 @app.get("/system/status")
-async def system_status():
+async def system_status(db: AsyncSession = Depends(get_db)):
     """Detailed system status information"""
     try:
-        # Database stats
-        users_count = len(db.execute_query("SELECT id FROM users"))
-        agents_count = len(db.execute_query("SELECT id FROM agents"))
-        conversations_count = len(db.execute_query("SELECT id FROM conversations"))
+        # Get database stats using SQLAlchemy
+        users_count = await db.scalar("SELECT COUNT(*) FROM users")
+        agents_count = await db.scalar("SELECT COUNT(*) FROM agents")
+        conversations_count = await db.scalar("SELECT COUNT(*) FROM conversations")
         
         return {
             "application": settings.APP_NAME,
@@ -199,14 +126,14 @@ async def system_status():
             "timestamp": datetime.utcnow().isoformat(),
             "database": {
                 "status": "connected",
-                "users": users_count,
-                "agents": agents_count,
-                "conversations": conversations_count
+                "users": users_count or 0,
+                "agents": agents_count or 0,
+                "conversations": conversations_count or 0
             },
             "configuration": {
                 "debug": settings.DEBUG,
                 "cors_enabled": True,
-                "api_versions": ["v1", "latest"]
+                "api_versions": ["latest"]
             }
         }
     except Exception as e:

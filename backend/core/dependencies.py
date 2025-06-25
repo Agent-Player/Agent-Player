@@ -6,9 +6,15 @@ Common dependencies for authentication and validation
 from fastapi import Depends, HTTPException, status, Header
 from typing import Dict, Any, Optional
 from core.security import security
-from config.database import db
+from config.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from models.user import User
 
-async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
     """Get current authenticated user from JWT token"""
     print(f"🔐 AUTH DEBUG: Starting authentication check")
     print(f"🔐 AUTH DEBUG: Authorization header: {authorization[:50] if authorization else 'None'}...")
@@ -64,14 +70,18 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
     print(f"🔐 AUTH DEBUG: Looking for user_id: {user_data.get('user_id')}")
     
     try:
-        query = "SELECT * FROM users WHERE id = ? AND is_active = 1"
-        users = db.execute_query(query, (user_data["user_id"],))
-        print(f"🔐 AUTH DEBUG: Database query result: {users}")
+        query = select(User).where(
+            User.id == user_data["user_id"],
+            User.is_active == True
+        )
+        result = await db.execute(query)
+        user = result.scalar_one_or_none()
+        print(f"🔐 AUTH DEBUG: Database query result: {user}")
     except Exception as e:
         print(f"🔐 AUTH DEBUG: Database query error: {e}")
-        users = []
+        user = None
     
-    if not users:
+    if not user:
         print(f"🔐 AUTH DEBUG: User not found or inactive in database")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -81,7 +91,9 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
     print(f"🔐 AUTH DEBUG: Authentication successful for user: {user_data.get('email')}")
     return user_data
 
-async def get_current_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+async def get_current_admin(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
     """Ensure current user is admin"""
     if current_user.get("role") != "admin":
         raise HTTPException(
@@ -90,12 +102,15 @@ async def get_current_admin(current_user: Dict[str, Any] = Depends(get_current_u
         )
     return current_user
 
-async def get_optional_user(authorization: Optional[str] = Header(None)) -> Optional[Dict[str, Any]]:
+async def get_optional_user(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db)
+) -> Optional[Dict[str, Any]]:
     """Get current user if token is provided (optional authentication)"""
     if not authorization:
         return None
     
     try:
-        return await get_current_user(authorization)
+        return await get_current_user(authorization=authorization, db=db)
     except HTTPException:
         return None 

@@ -8,9 +8,11 @@ alwaysApply: true
 ## 🚀 **COMPLETE API DOCUMENTATION**
 
 **Base URL:** `http://localhost:8000`  
-**API Version:** v1 (also available at `/api/v1/`)  
-**Total APIs:** 7 modules  
+**API Version:** Latest (no versioning prefix needed)  
+**Total APIs:** 9 modules  
 **Total Endpoints:** 67+ endpoints  
+
+**Note:** All endpoints are available directly without `/api/v1` prefix. Legacy v1 routes have been removed to eliminate duplication.
 
 ---
 

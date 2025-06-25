@@ -83,10 +83,73 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
+// Move handleInvalidRoute to be available in both components
+const handleInvalidRoute = () => {
+  return (
+    <div style={{
+      padding: '40px 20px',
+      textAlign: 'center',
+      color: '#666',
+      background: '#f8f8f8',
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}>
+      <div style={{
+        background: 'white',
+        padding: '30px',
+        borderRadius: '8px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        maxWidth: '600px',
+        width: '100%'
+      }}>
+        <h2 style={{ color: '#dc3545', marginBottom: '20px' }}>Page Not Found</h2>
+        <p style={{ marginBottom: '20px' }}>
+          The requested page does not exist or you may not have permission to access it.
+        </p>
+        <div style={{ marginTop: '30px' }}>
+          <button
+            onClick={() => window.history.back()}
+            style={{
+              padding: '10px 20px',
+              background: '#667eea',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              marginRight: '10px'
+            }}
+          >
+            ← Go Back
+          </button>
+          <button
+            onClick={() => window.location.href = '/dashboard'}
+            style={{
+              padding: '10px 20px',
+              background: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Dashboard Layout Component
 function DashboardLayout() {
   const location = useLocation();
   const isBoardPage = location.pathname.includes('/board');
+  
+  console.log('📍 Current location:', location.pathname);
+  console.log('🎯 Is board page:', isBoardPage);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8f8f8' }}>
@@ -100,21 +163,21 @@ function DashboardLayout() {
       }}>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/agents" element={<AgentPage />} />
-          <Route path="/child-agents" element={<ChildAgentPage />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/chat/:chatId" element={<ChildAgentChat />} />
-          <Route path="/form-builder" element={<FormBuilderPage />} />
-          <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/training-lab" element={<TrainingLabPage />} />
-          <Route path="/workflows" element={<WorkflowsPage />} />
-          <Route path="/marketplace" element={<MarketplacePage />} />
-          <Route path="/settings" element={<SettingsPageNew />} />
+          <Route path="agents" element={<AgentPage />} />
+          <Route path="child-agents" element={<ChildAgentPage />} />
+          <Route path="chat" element={<ChatPage />} />
+          <Route path="chat/:chatId" element={<ChildAgentChat />} />
+          <Route path="form-builder" element={<FormBuilderPage />} />
+          <Route path="tasks" element={<TasksPage />} />
+          <Route path="training-lab" element={<TrainingLabPage />} />
+          <Route path="workflows" element={<WorkflowsPage />} />
+          <Route path="marketplace" element={<MarketplacePage />} />
+          <Route path="settings" element={<SettingsPageNew />} />
           {/* Board routes with agent IDs */}
-          <Route path="/board/child-agent/:agentId" element={<BoardPage />} />
-          <Route path="/board/agent/:agentId" element={<BoardPage />} />
-          <Route path="/board" element={<BoardPage />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="board/child-agent/:agentId" element={<BoardPage />} />
+          <Route path="board/agent/:agentId" element={<BoardPage />} />
+          <Route path="board" element={<BoardPage />} />
+          <Route path="*" element={handleInvalidRoute()} />
         </Routes>
       </div>
     </div>
@@ -135,16 +198,11 @@ function AppWithNotifications() {
       <AuthWrapper>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          
-          <Route 
-            path="/dashboard/*" 
-            element={
-              <ProtectedRoute>
-                <DashboardLayout />
-              </ProtectedRoute>
-            } 
-          />
-          
+          <Route path="/dashboard/*" element={
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          } />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </AuthWrapper>

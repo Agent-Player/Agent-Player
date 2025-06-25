@@ -1,48 +1,78 @@
 """
 User Service
-Simplified user management service
+Simplified user management service using SQLAlchemy
 """
 
 from typing import Dict, Any, Optional, List
-from config.database import db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update, and_, func, desc
+from models.user import User, UserSession
+from models.activity_log import ActivityLog
+from fastapi import HTTPException
 
 class UserService:
     """User management service"""
     
-    def __init__(self):
-        self.db = db
-    
-    def get_all_users(self) -> List[Dict[str, Any]]:
+    async def get_all_users(self, db: AsyncSession) -> List[Dict[str, Any]]:
         """Get all users"""
-        query = "SELECT id, email, username, full_name, role, is_active, created_at FROM users ORDER BY created_at DESC"
-        return self.db.execute_query(query)
+        query = select(User).order_by(desc(User.created_at))
+        result = await db.execute(query)
+        users = result.scalars().all()
+        return [self._user_to_dict(user) for user in users]
     
-    def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
+    async def get_user_by_id(self, db: AsyncSession, user_id: int) -> Optional[Dict[str, Any]]:
         """Get specific user by ID"""
-        query = "SELECT id, email, username, full_name, role, is_active, created_at FROM users WHERE id = ?"
-        users = self.db.execute_query(query, (user_id,))
-        return users[0] if users else None
+        query = select(User).where(User.id == user_id)
+        result = await db.execute(query)
+        user = result.scalar_one_or_none()
+        return self._user_to_dict(user) if user else None
     
-    def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+    async def get_user_by_email(self, db: AsyncSession, email: str) -> Optional[Dict[str, Any]]:
         """Get specific user by email"""
-        query = "SELECT id, email, username, full_name, role, is_active, created_at FROM users WHERE email = ?"
-        users = self.db.execute_query(query, (email,))
-        return users[0] if users else None
+        query = select(User).where(User.email == email)
+        result = await db.execute(query)
+        user = result.scalar_one_or_none()
+        return self._user_to_dict(user) if user else None
     
-    def update_user(self, user_id: int, updates: Dict[str, Any]) -> bool:
+    async def update_user(self, db: AsyncSession, user_id: int, updates: Dict[str, Any]) -> bool:
         """Update existing user"""
-        return True
+        try:
+            query = select(User).where(User.id == user_id)
+            result = await db.execute(query)
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                return False
+                
+            for key, value in updates.items():
+                if hasattr(user, key):
+                    setattr(user, key, value)
+                    
+            await db.commit()
+            return True
+            
+        except Exception:
+            await db.rollback()
+            return False
     
-    def delete_user(self, user_id: int) -> bool:
+    async def delete_user(self, db: AsyncSession, user_id: int) -> bool:
         """Delete user (soft delete)"""
-        query = "UPDATE users SET is_active = 0 WHERE id = ?"
-        result = self.db.execute_command(query, (user_id,))
-        return result > 0
+        try:
+            query = update(User).where(User.id == user_id).values(
+                is_active=False,
+                deleted_at=func.now()
+            )
+            result = await db.execute(query)
+            await db.commit()
+            return result.rowcount > 0
+        except Exception:
+            await db.rollback()
+            return False
     
-    def get_user_statistics(self) -> Dict[str, Any]:
+    async def get_user_statistics(self, db: AsyncSession) -> Dict[str, Any]:
         """Get user statistics"""
-        total = len(self.db.execute_query("SELECT id FROM users"))
-        active = len(self.db.execute_query("SELECT id FROM users WHERE is_active = 1"))
+        total = await db.scalar(select(func.count()).select_from(User))
+        active = await db.scalar(select(func.count()).select_from(User).where(User.is_active == True))
         
         return {
             "total_users": total,
@@ -50,57 +80,205 @@ class UserService:
             "inactive_users": total - active
         }
 
-    def get_user_profile(self, user_id: int) -> Optional[Dict[str, Any]]:
+    async def get_user_profile(self, db: AsyncSession, user_id: int) -> Optional[Dict[str, Any]]:
         """Get current user profile"""
-        query = "SELECT id, email, username, full_name, role, is_active, created_at, updated_at FROM users WHERE id = ?"
-        users = self.db.execute_query(query, (user_id,))
-        return users[0] if users else None
+        query = select(User).where(User.id == user_id)
+        result = await db.execute(query)
+        user = result.scalar_one_or_none()
+        return self._user_to_dict(user, include_timestamps=True) if user else None
 
-    def update_user_profile(self, user_id: int, updates: Dict[str, Any]) -> bool:
+    async def update_user_profile(self, db: AsyncSession, user_id: int, updates: Dict[str, Any]) -> bool:
         """Update current user profile (full_name, bio, etc.)"""
-        allowed = {k: v for k, v in updates.items() if k in ["full_name", "bio"]}
-        if not allowed:
+        try:
+            allowed = {k: v for k, v in updates.items() if k in ["full_name", "bio"]}
+            if not allowed:
+                return False
+                
+            query = select(User).where(User.id == user_id)
+            result = await db.execute(query)
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                return False
+                
+            for key, value in allowed.items():
+                setattr(user, key, value)
+                
+            user.updated_at = func.now()
+            await db.commit()
+            return True
+            
+        except Exception:
+            await db.rollback()
             return False
-        set_clause = ", ".join([f"{k} = ?" for k in allowed.keys()])
-        params = list(allowed.values()) + [user_id]
-        query = f"UPDATE users SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-        result = self.db.execute_command(query, tuple(params))
-        return result > 0
 
-    def get_user_settings(self, user_id: int) -> Dict[str, Any]:
-        """Get user settings (mocked if not in DB)"""
-        # For demo, return mock settings
-        return {"theme": "light", "notifications_enabled": True, "language": "en"}
+    async def get_user_settings(self, db: AsyncSession, user_id: int) -> Dict[str, Any]:
+        """Get user settings"""
+        query = select(User).where(User.id == user_id)
+        result = await db.execute(query)
+        user = result.scalar_one_or_none()
+        
+        if not user or not user.preferences:
+            # Return defaults if no settings found
+            return {"theme": "light", "notifications_enabled": True, "language": "en"}
+            
+        return user.preferences.get("settings", {})
 
-    def update_user_settings(self, user_id: int, settings: Dict[str, Any]) -> bool:
-        """Update user settings (mock, always True)"""
-        # In real app, save to DB
-        return True
+    async def update_user_settings(self, db: AsyncSession, user_id: int, settings: Dict[str, Any]) -> bool:
+        """Update user settings"""
+        try:
+            query = select(User).where(User.id == user_id)
+            result = await db.execute(query)
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                return False
+                
+            if not user.preferences:
+                user.preferences = {}
+                
+            user.preferences["settings"] = settings
+            await db.commit()
+            return True
+            
+        except Exception:
+            await db.rollback()
+            return False
 
-    def get_user_preferences(self, user_id: int) -> Dict[str, Any]:
-        """Get user preferences (mocked)"""
-        return {"sidebar_collapsed": False, "show_tips": True}
+    async def get_user_preferences(self, db: AsyncSession, user_id: int) -> Dict[str, Any]:
+        """Get user preferences"""
+        query = select(User).where(User.id == user_id)
+        result = await db.execute(query)
+        user = result.scalar_one_or_none()
+        
+        if not user or not user.preferences:
+            # Return defaults if no preferences found
+            return {"sidebar_collapsed": False, "show_tips": True}
+            
+        return user.preferences.get("ui", {})
 
-    def update_user_preferences(self, user_id: int, preferences: Dict[str, Any]) -> bool:
-        """Update user preferences (mock, always True)"""
-        return True
+    async def update_user_preferences(self, db: AsyncSession, user_id: int, preferences: Dict[str, Any]) -> bool:
+        """Update user preferences"""
+        try:
+            query = select(User).where(User.id == user_id)
+            result = await db.execute(query)
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                return False
+                
+            if not user.preferences:
+                user.preferences = {}
+                
+            user.preferences["ui"] = preferences
+            await db.commit()
+            return True
+            
+        except Exception:
+            await db.rollback()
+            return False
 
-    def get_user_activity(self, user_id: int) -> list:
-        """Get user activity log (from activity_logs table)"""
-        query = "SELECT id, action, details, created_at FROM activity_logs WHERE user_id = ? ORDER BY created_at DESC"
-        return self.db.execute_query(query, (user_id,))
+    async def get_user_activity(self, db: AsyncSession, user_id: int) -> List[Dict[str, Any]]:
+        """Get user activity log"""
+        query = (
+            select(ActivityLog)
+            .where(ActivityLog.user_id == user_id)
+            .order_by(desc(ActivityLog.created_at))
+        )
+        result = await db.execute(query)
+        activities = result.scalars().all()
+        return [self._activity_to_dict(activity) for activity in activities]
 
-    def get_user_statistics(self, user_id: int) -> Dict[str, Any]:
-        """Get statistics for a specific user (mocked)"""
-        return {"total_logins": 12, "last_login": "2025-06-24 03:21:35", "total_actions": 34}
+    async def get_user_statistics_by_id(self, db: AsyncSession, user_id: int) -> Dict[str, Any]:
+        """Get statistics for a specific user"""
+        # Get login count from sessions
+        login_count = await db.scalar(
+            select(func.count())
+            .select_from(UserSession)
+            .where(UserSession.user_id == user_id)
+        )
+        
+        # Get last login time
+        last_login = await db.scalar(
+            select(func.max(UserSession.created_at))
+            .select_from(UserSession)
+            .where(UserSession.user_id == user_id)
+        )
+        
+        # Get total actions
+        action_count = await db.scalar(
+            select(func.count())
+            .select_from(ActivityLog)
+            .where(ActivityLog.user_id == user_id)
+        )
+        
+        return {
+            "total_logins": login_count or 0,
+            "last_login": last_login.isoformat() if last_login else None,
+            "total_actions": action_count or 0
+        }
 
-    def update_user_by_admin(self, user_id: int, updates: Dict[str, Any]) -> bool:
+    async def update_user_by_admin(self, db: AsyncSession, user_id: int, updates: Dict[str, Any]) -> bool:
         """Admin: update user info"""
-        allowed = {k: v for k, v in updates.items() if k in ["full_name", "role", "is_active"]}
-        if not allowed:
+        try:
+            allowed = {k: v for k, v in updates.items() if k in ["full_name", "role", "is_active"]}
+            if not allowed:
+                return False
+                
+            query = select(User).where(User.id == user_id)
+            result = await db.execute(query)
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                return False
+                
+            for key, value in allowed.items():
+                setattr(user, key, value)
+                
+            user.updated_at = func.now()
+            await db.commit()
+            return True
+            
+        except Exception:
+            await db.rollback()
             return False
-        set_clause = ", ".join([f"{k} = ?" for k in allowed.keys()])
-        params = list(allowed.values()) + [user_id]
-        query = f"UPDATE users SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-        result = self.db.execute_command(query, tuple(params))
-        return result > 0 
+    
+    def _user_to_dict(self, user: User, include_timestamps: bool = False) -> Optional[Dict[str, Any]]:
+        """Convert User model to dictionary"""
+        if not user:
+            return None
+            
+        result = {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "full_name": user.full_name,
+            "role": user.role,
+            "is_active": user.is_active,
+            "is_verified": user.is_verified,
+            "email_verified": user.email_verified,
+            "phone_verified": user.phone_verified,
+            "two_factor_enabled": user.two_factor_enabled,
+            "preferences": user.preferences
+        }
+        
+        if include_timestamps:
+            result.update({
+                "created_at": user.created_at,
+                "updated_at": user.updated_at,
+                "last_login": user.last_login
+            })
+            
+        return result
+    
+    def _activity_to_dict(self, activity: ActivityLog) -> Dict[str, Any]:
+        """Convert ActivityLog model to dictionary"""
+        return {
+            "id": activity.id,
+            "action": activity.action,
+            "details": activity.details,
+            "ip_address": activity.ip_address,
+            "user_agent": activity.user_agent,
+            "extra_data": activity.extra_data,
+            "created_at": activity.created_at
+        } 

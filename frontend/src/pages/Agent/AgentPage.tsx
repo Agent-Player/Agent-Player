@@ -6,6 +6,7 @@ import TestAgentModal from './components/TestAgentModal';
 import agentsService from '../../services/agents';
 import { useNotificationContext } from '../../context/NotificationContext';
 import { configUtils } from '../../config';
+import { useNavigate } from 'react-router-dom';
 
 interface AgentData {
   id: number;
@@ -24,6 +25,9 @@ interface AgentData {
   temperature?: string;
   maxTokens?: number;
   capabilities?: string[];
+  specialization?: string;
+  learningEnabled?: boolean;
+  autonomyLevel?: string;
 }
 
 interface AgentFormData {
@@ -95,14 +99,15 @@ const AgentPage: React.FC = () => {
     child: []
   });
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   // Load agents from API
   const loadAgents = async () => {
     try {
       setLoading(true);
       
-      // Load main agents - Updated to use new API structure
-      const mainAgentsUrl = configUtils.getApiUrl('/agents');
+      // Load main agents - Using consistent API paths
+      const mainAgentsUrl = configUtils.getApiUrl(configUtils.getEndpoint('agents', 'main'));
       console.log('🔗 Loading main agents from:', mainAgentsUrl);
       const mainAgentsResponse = await fetch(mainAgentsUrl);
       const mainAgentsData = await mainAgentsResponse.json();
@@ -110,8 +115,12 @@ const AgentPage: React.FC = () => {
       // Debug logging
       console.log('🔍 Main Agents API Response:', mainAgentsData);
       console.log('🔍 Main Agents Data Array:', mainAgentsData.data);
+      
       // Extract agents array safely
-      const mainAgentsArray = (mainAgentsData.data?.agents || []);
+      const mainAgentsArray = Array.isArray(mainAgentsData.data?.agents) 
+        ? mainAgentsData.data.agents.filter((agent: { type: string; parent_agent_id: number; }) => agent.type === 'main' || !agent.parent_agent_id)
+        : [];
+      
       console.log('🔍 Main Agents Array:', mainAgentsArray);
       console.log('🔍 Main Agents Data Length:', mainAgentsArray.length);
       
@@ -122,7 +131,8 @@ const AgentPage: React.FC = () => {
         status?: string; 
         performance_score?: number; 
         model_provider?: string; 
-        model_name?: string; 
+        model_name?: string;
+        type?: string;
       }) => ({
         id: agent.id,
         name: agent.name,
@@ -135,8 +145,8 @@ const AgentPage: React.FC = () => {
         llmModel: agent.model_name,
       }));
 
-      // Load child agents - Updated to use new API structure
-      const childAgentsUrl = configUtils.getApiUrl('/agents/child');
+      // Load child agents - Using consistent API paths
+      const childAgentsUrl = configUtils.getApiUrl(configUtils.getEndpoint('agents', 'child'));
       console.log('🔗 Loading child agents from:', childAgentsUrl);
       const childAgentsResponse = await fetch(childAgentsUrl);
       const childAgentsData = await childAgentsResponse.json();
@@ -144,8 +154,12 @@ const AgentPage: React.FC = () => {
       // Debug logging
       console.log('🔍 Child Agents API Response:', childAgentsData);
       console.log('🔍 Child Agents Data Array:', childAgentsData.data);
-      // Extract agents array safely
-      const childAgentsArray = (childAgentsData.data?.agents || []);
+      
+      // Extract agents array safely and ensure they are child agents
+      const childAgentsArray = Array.isArray(childAgentsData.data?.agents)
+        ? childAgentsData.data.agents.filter((agent: { type: string; parent_agent_id: number; }) => agent.type === 'child' || agent.parent_agent_id)
+        : [];
+      
       console.log('🔍 Child Agents Array:', childAgentsArray);
       console.log('🔍 Child Agents Data Length:', childAgentsArray.length);
       
@@ -156,7 +170,8 @@ const AgentPage: React.FC = () => {
         status?: string; 
         tasks_completed?: number; 
         performance_score?: number; 
-        parent_agent_name?: string; 
+        parent_agent_name?: string;
+        type?: string;
       }) => ({
         id: agent.id,
         name: agent.name,
@@ -173,8 +188,8 @@ const AgentPage: React.FC = () => {
       console.log('🤖 Final Child Agents:', childAgents);
 
       setAgents({
-        main: mainAgents,
-        child: childAgents
+        main: mainAgents.filter(agent => agent.type === 'main'),  // Extra safety check
+        child: childAgents.filter(agent => agent.type === 'child') // Extra safety check
       });
 
     } catch (error) {
@@ -454,7 +469,7 @@ const AgentPage: React.FC = () => {
           specialization: agentData.type || 'general',
           training_data: {},
           capabilities: agentData.capabilities || [],
-          learning_enabled: true,
+          learning_enabled: agentData.settings?.learning || true,
           autonomy_level: 'supervised'
         };
       }
@@ -466,10 +481,12 @@ const AgentPage: React.FC = () => {
         const updateUrl = configUtils.getApiUrl(`/${apiEndpoint}/${editingAgent.id}`);
         console.log('🔧 Updating agent via:', updateUrl);
         
+        const token = localStorage.getItem('access_token');
         const response = await fetch(updateUrl, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify(agentRequest),
         });
@@ -482,28 +499,22 @@ const AgentPage: React.FC = () => {
         console.log('🎯 Agent updated successfully:', result);
       } else {
         // Create new agent
-        if (builderType === 'child') {
-          // Create child agent using child agents API
-          const token = localStorage.getItem('access_token');
-          const createUrl = configUtils.getApiUrl('/agents/child');
-          const response = await fetch(createUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify(agentRequest),
-          });
-          
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          
-          result = await response.json();
-        } else {
-          // Create main agent using existing service
-          result = await agentsService.createAgent(agentRequest);
+        const token = localStorage.getItem('access_token');
+        const createUrl = configUtils.getApiUrl(builderType === 'child' ? '/agents/child' : '/agents');
+        const response = await fetch(createUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(agentRequest),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
+        result = await response.json();
         console.log('🎯 Agent created successfully:', result);
       }
 
@@ -532,13 +543,13 @@ const AgentPage: React.FC = () => {
       }, 1000);
 
       // Navigate to board for Child Agents only (for new agents)
-      if (!isEditing && builderType === 'child') {
+      if (!isEditing && builderType === 'child' && result.data?.id) {
         setTimeout(() => {
           confirm(
             '🤖 Child Agent created! Would you like to go to the Training Board?',
             'Go to Training Board',
             () => {
-              window.location.href = `/dashboard/board/child-agent/${result.data?.id}`;
+              navigate(`/dashboard/board/child-agent/${result.data.id}`);
             }
           );
         }, 1000);
@@ -556,8 +567,9 @@ const AgentPage: React.FC = () => {
   // Load full agent data for editing
   const loadAgentForEdit = async (agentData: AgentData, isChild: boolean) => {
     try {
-      const apiEndpoint = isChild ? 'child-agents' : 'agents';
-      const url = configUtils.getApiUrl(`/api/v1/${apiEndpoint}/${agentData.id}`);
+      // Use correct API endpoint without /api/v1 prefix
+      const apiEndpoint = isChild ? 'agents/child' : 'agents';
+      const url = configUtils.getApiUrl(`/${apiEndpoint}/${agentData.id}`);
       
       console.log('🔧 Loading full agent data for editing:', url);
       const response = await fetch(url);
@@ -573,7 +585,7 @@ const AgentPage: React.FC = () => {
           name: fullAgentData.name,
           description: fullAgentData.description,
           status: fullAgentData.status,
-          type: fullAgentData.type,
+          type: isChild ? 'child' : 'main',
           tasks: fullAgentData.tasks_completed || 0,
           performance: (fullAgentData.performance_score || 100) + '%',
           llmProvider: fullAgentData.model_provider,
@@ -583,7 +595,11 @@ const AgentPage: React.FC = () => {
           temperature: fullAgentData.temperature || '0.7',
           maxTokens: fullAgentData.max_tokens || 4000,
           capabilities: fullAgentData.capabilities || [],
-          parentAgent: fullAgentData.parent_agent_name
+          parentAgent: fullAgentData.parent_agent_name,
+          // Add child-specific properties
+          specialization: fullAgentData.specialization || 'general',
+          learningEnabled: fullAgentData.learning_enabled || true,
+          autonomyLevel: fullAgentData.autonomy_level || 'supervised'
         };
         
         return editingData;
@@ -647,32 +663,17 @@ const AgentPage: React.FC = () => {
     }
   };
 
-  const handleDeleteAgent = (agentData: AgentData, isChild: boolean) => {
+  const handleDeleteAgent = (agentData: AgentData) => {
     confirm(
       `⚠️ Are you sure you want to delete "${agentData.name}"?\n\nThis action cannot be undone.`,
       'Delete Agent',
       async () => {
         try {
-          // Call API to delete agent
-          const token = localStorage.getItem('access_token');
-          if (isChild) {
-            const deleteUrl = configUtils.getApiUrl(`/api/v1/child-agents/${agentData.id}`);
-            await fetch(deleteUrl, {
-              method: 'DELETE',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-            });
-          } else {
-            const deleteUrl = configUtils.getApiUrl(`/api/v1/agents/${agentData.id}`);
-            await fetch(deleteUrl, {
-              method: 'DELETE',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-            });
+          // Use the agentsService to delete the agent
+          const result = await agentsService.deleteAgent(agentData.id);
+
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to delete agent from server');
           }
 
           // Reload agents from API
@@ -701,8 +702,15 @@ const AgentPage: React.FC = () => {
 
   const navigateToBoard = (agentData: AgentData) => {
     console.log(`🎯 Opening Board for: ${agentData.name}`);
-    // Navigate to board with child agent context
-    window.location.href = `/dashboard/board/child-agent/${agentData.id}`;
+    console.log(`🔗 Agent ID: ${agentData.id}`);
+    
+    // Navigate relative to /dashboard
+    const targetUrl = `/dashboard/board/child-agent/${agentData.id}`;
+    console.log(`📍 Target URL: ${targetUrl}`);
+    console.log(`🚀 Navigating using React Router...`);
+    
+    // Use navigate with absolute path
+    navigate(targetUrl, { replace: true });
   };
 
   const openLLMConnections = (agentData: AgentData) => {
@@ -847,7 +855,7 @@ const AgentPage: React.FC = () => {
               style={{ ...styles.button, ...styles.dangerButton }}
               onClick={(e) => {
                 e.stopPropagation();
-                handleDeleteAgent(agentData, false);
+                handleDeleteAgent(agentData);
               }}
               title="Permanently delete this agent"
             >
@@ -880,7 +888,7 @@ const AgentPage: React.FC = () => {
               style={{ ...styles.button, ...styles.dangerButton }}
               onClick={(e) => {
                 e.stopPropagation();
-                handleDeleteAgent(agentData, true);
+                handleDeleteAgent(agentData);
               }}
               title="Remove this child agent from the system"
             >

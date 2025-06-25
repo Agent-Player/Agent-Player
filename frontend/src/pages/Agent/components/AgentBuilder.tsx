@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { agentsService } from '../../../services/agents';
 
 interface LocalEndpoint {
   id: string;
@@ -115,23 +116,15 @@ export const AgentBuilder: React.FC<AgentBuilderProps> = ({
   const [selectedParentAgent, setSelectedParentAgent] = useState<number | null>(null);
 
   // Load main agents for child agent parent selection
-  React.useEffect(() => {
+  useEffect(() => {
     if (agentType === 'child' && isOpen) {
       const loadMainAgents = async () => {
         try {
-          const response = await fetch('http://localhost:8000/api/v1/agents/main');
-          const result = await response.json();
-          console.log('🔍 Main agents response:', result);
+          const agents = await agentsService.getMainAgents();
+          console.log('✅ Main agents loaded:', agents);
           
-          if (result.success && result.data && result.data.agents) {
-            // result.data.agents is the array we need
-            const agentsArray = result.data.agents.map((agent: {
-              id: number;
-              name: string;
-              description?: string;
-              model_provider?: string;
-              is_active?: boolean;
-            }) => ({
+          if (agents && agents.length > 0) {
+            const agentsArray = agents.map(agent => ({
               id: agent.id,
               name: agent.name,
               description: agent.description || '',
@@ -139,9 +132,8 @@ export const AgentBuilder: React.FC<AgentBuilderProps> = ({
               status: agent.is_active ? 'active' : 'inactive'
             }));
             setMainAgents(agentsArray);
-            console.log('✅ Main agents loaded:', agentsArray);
           } else {
-            console.warn('⚠️ Invalid response structure or no agents found');
+            console.warn('⚠️ No main agents found');
             setMainAgents([]);
           }
         } catch (error) {
@@ -838,22 +830,24 @@ export const AgentBuilder: React.FC<AgentBuilderProps> = ({
     onClose();
   };
 
+  // Handle behavioral settings toggle
+  const toggleBehavioralSetting = (setting: string) => {
+    setFormData(prev => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        [setting]: !prev.settings[setting]
+      }
+    }));
+  };
+
+  // Handle capability toggle
   const toggleCapability = (capability: string) => {
     setFormData(prev => ({
       ...prev,
       capabilities: prev.capabilities.includes(capability)
         ? prev.capabilities.filter(c => c !== capability)
-        : [...prev.capabilities, capability],
-    }));
-  };
-
-  const toggleSetting = (setting: string) => {
-    setFormData(prev => ({
-      ...prev,
-      settings: {
-        ...prev.settings,
-        [setting]: !prev.settings[setting as keyof typeof prev.settings],
-      },
+        : [...prev.capabilities, capability]
     }));
   };
 
@@ -1576,7 +1570,7 @@ export const AgentBuilder: React.FC<AgentBuilderProps> = ({
                       ...styles.switch,
                       ...(formData.settings.autoResponse ? styles.switchActive : {}),
                     }}
-                    onClick={() => toggleSetting('autoResponse')}
+                    onClick={() => toggleBehavioralSetting('autoResponse')}
                   >
                     <div
                       style={{
@@ -1593,7 +1587,7 @@ export const AgentBuilder: React.FC<AgentBuilderProps> = ({
                       ...styles.switch,
                       ...(formData.settings.learning ? styles.switchActive : {}),
                     }}
-                    onClick={() => toggleSetting('learning')}
+                    onClick={() => toggleBehavioralSetting('learning')}
                   >
                     <div
                       style={{

@@ -6,7 +6,7 @@ Creates tables and admin user
 import os
 import bcrypt
 from datetime import datetime
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.orm import sessionmaker
 from models import Base
 from models.user import User, UserSession
@@ -15,10 +15,10 @@ from models.chat import Conversation, Message
 from models.activity_log import ActivityLog
 
 # Database path
-db_path = "backend/data/database.db"
+db_path = "data/database.db"
 
 # Create the directory if it doesn't exist
-os.makedirs("backend/data", exist_ok=True)
+os.makedirs("data", exist_ok=True)
 
 def hash_password_bcrypt(password: str) -> str:
     """Hash password using bcrypt"""
@@ -34,12 +34,12 @@ try:
     # Create engine
     engine = create_engine(database_url)
     
-    # Drop all tables first to ensure clean state
-    Base.metadata.drop_all(bind=engine)
+    # Get inspector
+    inspector = inspect(engine)
     
-    # Create all tables
+    # Create tables only if they don't exist
     Base.metadata.create_all(bind=engine)
-    print("✅ All tables created successfully!")
+    print("✅ Database tables verified!")
     
     # Create session
     Session = sessionmaker(bind=engine)
@@ -74,10 +74,7 @@ try:
         print("Email: me@alarade.at")
         print("Password: admin123456")
     else:
-        # Update admin password
-        admin.password_hash = hash_password_bcrypt("admin123456")
-        session.commit()
-        print("✅ Admin user password updated!")
+        print("✅ Admin user already exists!")
     
     # Print all users for debugging
     print("\nAll users in database:")

@@ -5,6 +5,7 @@ JWT token management and password handling
 
 import bcrypt
 import jwt
+import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from config.settings import settings
@@ -23,11 +24,17 @@ class SecurityManager:
         return hashed.decode('utf-8')
     
     def verify_password(self, password: str, hashed_password: str) -> bool:
-        """Verify password against hash"""
+        """Verify password against hash (supports both bcrypt and SHA-256)"""
         try:
-            password_bytes = password.encode('utf-8')
-            hashed_bytes = hashed_password.encode('utf-8')
-            return bcrypt.checkpw(password_bytes, hashed_bytes)
+            # First try bcrypt
+            try:
+                password_bytes = password.encode('utf-8')
+                hashed_bytes = hashed_password.encode('utf-8')
+                return bcrypt.checkpw(password_bytes, hashed_bytes)
+            except Exception:
+                # If bcrypt fails, try SHA-256
+                sha256_hash = hashlib.sha256(password.encode()).hexdigest()
+                return sha256_hash == hashed_password
         except Exception:
             return False
     

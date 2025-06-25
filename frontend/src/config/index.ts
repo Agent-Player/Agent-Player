@@ -368,9 +368,23 @@ export function validateConfig(): string[] {
 
 // Configuration Utilities
 export const configUtils = {
-  // Get full API URL
-  getApiUrl: (endpoint: string): string => {
-    return `${config.api.baseURL}${endpoint}`;
+  getApiUrl: (path: string): string => {
+    const baseUrl = "http://localhost:8000";
+    // Remove any leading slashes and ensure no double slashes
+    const cleanPath = path.replace(/^\/+/, "");
+    return `${baseUrl}/${cleanPath}`;
+  },
+
+  // Helper to ensure consistent API paths
+  getEndpoint: (
+    type: "agents" | "child-agents" | "chat" | "auth" | "users" | "tasks",
+    action?: string
+  ): string => {
+    const basePath = type;
+    if (action) {
+      return `${basePath}/${action}`;
+    }
+    return basePath;
   },
 
   // Get WebSocket URL with token

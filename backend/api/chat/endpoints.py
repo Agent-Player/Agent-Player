@@ -6,7 +6,7 @@ All chat and conversation related routes
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Dict, Any, List, Optional
 from models.chat import (
-    ConversationCreateRequest, ConversationUpdateRequest, MessageCreateRequest,
+    ConversationCreate, ConversationUpdate, MessageCreate,
     ConversationListResponse, ConversationDetailResponse, MessageListResponse,
     ChatAnalyticsResponse, AIResponseRequest
 )
@@ -15,7 +15,7 @@ from core.dependencies import get_current_user, get_optional_user
 from services.chat_service import ChatService
 
 # Initialize router and service
-router = APIRouter(prefix="/chat", tags=["Chat"])
+router = APIRouter(tags=["Chat"])
 chat_service = ChatService()
 
 # Conversation endpoints
@@ -27,12 +27,12 @@ async def get_conversations(
 ):
     """Get user conversations"""
     try:
-        conversations = chat_service.get_user_conversations(
+        conversations = await chat_service.get_user_conversations(
             current_user["user_id"], 
             limit=limit, 
             offset=offset
         )
-        total = chat_service.get_user_conversations_count(current_user["user_id"])
+        total = await chat_service.get_user_conversations_count(current_user["user_id"])
         
         return SuccessResponse(
             message=f"Found {len(conversations)} conversations",
@@ -48,17 +48,17 @@ async def get_conversations(
 
 @router.post("/conversations", response_model=SuccessResponse)
 async def create_conversation(
-    request: ConversationCreateRequest,
+    request: ConversationCreate,
     current_user: Dict = Depends(get_current_user)
 ):
     """Create new conversation"""
     try:
-        # Set user_id from current user
-        request.user_id = current_user["user_id"]
+        # Set user_id from the authenticated user's session
+        user_id = current_user["user_id"]
         
-        conversation_id = chat_service.create_conversation(
+        conversation_id = await chat_service.create_conversation(
             title=request.title,
-            user_id=request.user_id,
+            user_id=user_id,
             agent_id=request.agent_id
         )
         
@@ -76,7 +76,7 @@ async def get_conversation(
 ):
     """Get specific conversation"""
     try:
-        conversation = chat_service.get_conversation_by_id(conversation_id)
+        conversation = await chat_service.get_conversation_by_id(conversation_id)
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
@@ -96,20 +96,20 @@ async def get_conversation(
 @router.put("/conversations/{conversation_id}", response_model=SuccessResponse)
 async def update_conversation(
     conversation_id: str,
-    request: ConversationUpdateRequest,
+    request: ConversationUpdate,
     current_user: Dict = Depends(get_current_user)
 ):
     """Update conversation"""
     try:
         # Check if user owns this conversation
-        conversation = chat_service.get_conversation_by_id(conversation_id)
+        conversation = await chat_service.get_conversation_by_id(conversation_id)
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         if conversation["user_id"] != current_user["user_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        success = chat_service.update_conversation(conversation_id, request.dict(exclude_unset=True))
+        success = await chat_service.update_conversation(conversation_id, request.dict(exclude_unset=True))
         if not success:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
@@ -130,14 +130,14 @@ async def delete_conversation(
     """Delete conversation"""
     try:
         # Check if user owns this conversation
-        conversation = chat_service.get_conversation_by_id(conversation_id)
+        conversation = await chat_service.get_conversation_by_id(conversation_id)
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         if conversation["user_id"] != current_user["user_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        success = chat_service.delete_conversation(conversation_id)
+        success = await chat_service.delete_conversation(conversation_id)
         if not success:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
@@ -161,19 +161,19 @@ async def get_conversation_messages(
     """Get messages for a conversation"""
     try:
         # Check if user owns this conversation
-        conversation = chat_service.get_conversation_by_id(conversation_id)
+        conversation = await chat_service.get_conversation_by_id(conversation_id)
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         if conversation["user_id"] != current_user["user_id"]:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        messages = chat_service.get_conversation_messages(
+        messages = await chat_service.get_conversation_messages(
             conversation_id, 
             limit=limit, 
             offset=offset
         )
-        total = chat_service.get_conversation_messages_count(conversation_id)
+        total = await chat_service.get_conversation_messages_count(conversation_id)
         
         return SuccessResponse(
             message=f"Found {len(messages)} messages",
@@ -192,13 +192,13 @@ async def get_conversation_messages(
 @router.post("/conversations/{conversation_id}/messages", response_model=SuccessResponse)
 async def add_message_to_conversation(
     conversation_id: str,
-    request: MessageCreateRequest,
+    request: MessageCreate,
     current_user: Dict = Depends(get_current_user)
 ):
     """Add message to conversation"""
     try:
         # Check if user owns this conversation
-        conversation = chat_service.get_conversation_by_id(conversation_id)
+        conversation = await chat_service.get_conversation_by_id(conversation_id)
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
@@ -207,7 +207,7 @@ async def add_message_to_conversation(
         
         result = await chat_service.add_message_to_conversation(
             conversation_id=conversation_id,
-            message=request.message,
+            content=request.content,
             sender_type=request.sender_type,
             agent_id=request.agent_id
         )
@@ -230,7 +230,7 @@ async def get_ai_response(
     """Get AI response for a message"""
     try:
         # Check if user owns this conversation
-        conversation = chat_service.get_conversation_by_id(conversation_id)
+        conversation = await chat_service.get_conversation_by_id(conversation_id)
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
@@ -259,7 +259,7 @@ async def get_ai_response(
 async def get_chat_analytics(current_user: Dict = Depends(get_current_user)):
     """Get chat analytics for current user"""
     try:
-        analytics = chat_service.get_user_chat_analytics(current_user["user_id"])
+        analytics = await chat_service.get_user_chat_analytics(current_user["user_id"])
         return SuccessResponse(
             message="Analytics retrieved",
             data=analytics
@@ -274,7 +274,7 @@ async def get_global_chat_analytics(current_user: Dict = Depends(get_current_use
         if current_user.get("role") != "admin":
             raise HTTPException(status_code=403, detail="Admin access required")
         
-        analytics = chat_service.get_global_chat_analytics()
+        analytics = await chat_service.get_global_chat_analytics()
         return SuccessResponse(
             message="Global analytics retrieved",
             data=analytics
@@ -294,7 +294,7 @@ async def search_messages(
 ):
     """Search messages"""
     try:
-        results = chat_service.search_user_messages(
+        results = await chat_service.search_user_messages(
             user_id=current_user["user_id"],
             query=query,
             conversation_id=conversation_id,

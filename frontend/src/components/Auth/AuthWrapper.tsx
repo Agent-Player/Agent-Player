@@ -50,11 +50,10 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
       await checkAuth();
     } catch (err) {
       console.error('Failed to check system status:', err);
-      setSystemStatus('needs_admin');
-      setLoading(false);
-      if (location.pathname !== '/admin-setup') {
-        navigate('/admin-setup');
-      }
+      // If system status check fails, proceed with authentication check
+      console.log('Proceeding with authentication check despite system status error...');
+      setSystemStatus('ready');
+      await checkAuth();
     }
   };
 
@@ -79,6 +78,11 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
       localStorage.removeItem('user');
       setIsAuthenticated(false);
       setLoading(false);
+      
+      // If we're not already on the login page, redirect there
+      if (location.pathname !== '/login') {
+        navigate('/login');
+      }
     }
   };
 

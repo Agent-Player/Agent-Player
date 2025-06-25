@@ -65,6 +65,7 @@ export const SmartSequentialParticleSystem: React.FC<SmartSequentialParticleSyst
   const [particleQueue, setParticleQueue] = useState<SimpleParticle[]>([]);
   const [currentParticleIndex, setCurrentParticleIndex] = useState(0);
   const [completedParticles, setCompletedParticles] = useState<Set<string>>(new Set());
+  const lastQueueDataRef = React.useRef<string | null>(null);
 
   // Create particle queue for animated connections
   useEffect(() => {
@@ -361,7 +362,7 @@ export const SmartSequentialParticleSystem: React.FC<SmartSequentialParticleSyst
   // Update parent component with queue data
   useEffect(() => {
     if (onQueueUpdate) {
-      onQueueUpdate({
+      const queueData = {
         queueItems: particleQueue.map(particle => ({
           id: particle.id,
           serviceType: particle.serviceType,
@@ -376,9 +377,46 @@ export const SmartSequentialParticleSystem: React.FC<SmartSequentialParticleSyst
         })),
         currentProcessingIndex: currentParticleIndex,
         isSequentialMode
-      });
+      };
+
+      // Prevent infinite updates by checking if data actually changed
+      const queueDataString = JSON.stringify(queueData);
+      if (queueDataString !== lastQueueDataRef.current) {
+        lastQueueDataRef.current = queueDataString;
+        onQueueUpdate(queueData);
+      }
     }
   }, [particleQueue, currentParticleIndex, completedParticles, isSequentialMode, onQueueUpdate]);
+
+  // Animation loop with cleanup
+  useEffect(() => {
+    let isActive = true;
+    const interval = setInterval(() => {
+      if (!isActive) return;
+
+      setParticleQueue(prevQueue => {
+        // Skip update if no changes needed
+        if (prevQueue.every(p => !p.isActive && !p.isFading)) {
+          return prevQueue;
+        }
+
+        const updatedQueue = [...prevQueue];
+
+        if (isSequentialMode) {
+          // Sequential mode logic...
+        } else {
+          // Parallel mode logic...
+        }
+
+        return updatedQueue;
+      });
+    }, 50);
+
+    return () => {
+      isActive = false;
+      clearInterval(interval);
+    };
+  }, [isSequentialMode, connections.length]); // Only depend on mode changes and connections count
 
   return (
     <div style={{

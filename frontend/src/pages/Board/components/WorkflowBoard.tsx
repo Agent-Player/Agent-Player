@@ -1,4 +1,4 @@
-import React, { useRef, useState, useImperativeHandle, forwardRef, useEffect } from 'react';
+import React, { useRef, useState, useImperativeHandle, useEffect } from 'react';
 import './boardTheme.css';
 import { SmartSequentialParticleSystem } from './SmartSequentialParticleSystem';
 
@@ -45,25 +45,26 @@ interface LogEntry {
   details?: Record<string, unknown>;
 }
 
+interface QueueData {
+  queueItems: Array<{
+    id: string;
+    serviceType: string;
+    icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+    color: string;
+    status: 'pending' | 'current' | 'success' | 'error' | 'warning' | 'completed';
+    isDisappearing?: boolean;
+  }>;
+  currentProcessingIndex: number;
+  isSequentialMode: boolean;
+}
+
 export interface WorkflowBoardProps {
-  sidebarOpen?: boolean;
-  onCloseSidebar?: () => void;
+  boardId: string;
   onToggleLog?: () => void;
   showLog?: boolean;
   onToggleHelp?: () => void;
   liveMode?: boolean;
-  onQueueUpdate?: (queueData: {
-    queueItems: Array<{
-      id: string;
-      serviceType: string;
-      icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-      color: string;
-      status: 'pending' | 'current' | 'success' | 'error' | 'warning' | 'completed';
-      isDisappearing?: boolean;
-    }>;
-    currentProcessingIndex: number;
-    isSequentialMode: boolean;
-  }) => void;
+  onQueueUpdate?: (queueData: QueueData) => void;
   onAddLog?: (entry: Omit<LogEntry, 'id' | 'timestamp'>) => void;
 }
 
@@ -85,45 +86,40 @@ interface WorkflowConnection {
   targetPort?: string;
 }
 
-const WorkflowBoard = forwardRef<WorkflowBoardHandle, WorkflowBoardProps>(
-  ({ sidebarOpen = false, onCloseSidebar, onToggleLog, showLog = false, onToggleHelp, liveMode = false, onQueueUpdate }, ref) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-  
-  // Enhanced state management
+// Create base component with stable props comparison
+const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardProps>((props, ref) => {
+  const {
+    boardId,
+    onToggleLog,
+    showLog,
+    onToggleHelp,
+    liveMode,
+    onQueueUpdate,
+    onAddLog
+  } = props;
+
+  // Memoize state
   const [nodes, setNodes] = useState<WorkflowNode[]>([]);
   const [connections, setConnections] = useState<WorkflowConnection[]>([]);
-  const [zoom, setZoom] = useState(1);
+  const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
+  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [animatedConnections, setAnimatedConnections] = useState<Set<string>>(new Set());
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // Enhanced state management
   const [connectionType, setConnectionTypeState] = useState<ConnectionType>('curved');
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === 'dark' || saved === 'light') return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
   const [toast, setToast] = useState<string | null>(null);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
-  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanPosition, setLastPanPosition] = useState({ x: 0, y: 0 });
   const [showMinimap, setShowMinimap] = useState(false);
-  // Help state now managed by parent BoardPage
-  const [animatedConnections, setAnimatedConnections] = useState<Set<string>>(new Set());
   const [isSequentialMode, setIsSequentialMode] = useState(true); // Sequential by default
   
   // Queue data for LogPanel
-  const [queueData, setQueueData] = useState<{
-    queueItems: Array<{
-      id: string;
-      serviceType: string;
-      icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-      color: string;
-      status: 'pending' | 'current' | 'success' | 'error' | 'warning' | 'completed';
-      isDisappearing?: boolean;
-    }>;
-    currentProcessingIndex: number;
-    isSequentialMode: boolean;
-  } | null>(null);
+  const [queueData, setQueueData] = useState<QueueData | null>(null);
   
   const boardRef = useRef<HTMLDivElement>(null);
 
@@ -1267,9 +1263,29 @@ const WorkflowBoard = forwardRef<WorkflowBoardHandle, WorkflowBoardProps>(
         {/* Left Section - Board Info */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ color: theme === 'dark' ? '#67eea' : '#667eea', fontWeight: '600' }}>
-              <i className="fas fa-project-diagram" style={{ marginRight: '5px' }}></i>
-              158831
+            <span style={{ 
+              color: theme === 'dark' ? '#67eea' : '#667eea', 
+              fontWeight: '600',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              cursor: 'help',
+            }}
+            title='Board ID - Used for tracking and synchronization'
+            >
+              <i className="fas fa-fingerprint" style={{ marginRight: '5px' }}></i>
+              {boardId.split('-').map((part, index) => (
+                <span key={index} style={{
+                  backgroundColor: index === 1 ? 'rgba(102, 126, 234, 0.1)' : 'transparent',
+                  padding: index === 1 ? '2px 4px' : '0',
+                  borderRadius: '4px',
+                  fontSize: index === 1 ? '12px' : '11px',
+                  opacity: index === 2 ? 0.7 : 1
+                }}>
+                  {part}
+                  {index < 2 && '-'}
+                </span>
+              ))}
             </span>
             <span style={{ color: theme === 'dark' ? '#aaa' : '#666' }}>|</span>
             <span>
@@ -1491,6 +1507,18 @@ const WorkflowBoard = forwardRef<WorkflowBoardHandle, WorkflowBoardProps>(
   );
 });
 
-WorkflowBoard.displayName = 'WorkflowBoard';
+// Add display name
+BaseWorkflowBoard.displayName = 'WorkflowBoard';
 
+// Wrap with memo and custom comparison
+const WorkflowBoard = React.memo(BaseWorkflowBoard, (prevProps, nextProps) => {
+  return (
+    prevProps.showLog === nextProps.showLog &&
+    prevProps.liveMode === nextProps.liveMode &&
+    prevProps.onQueueUpdate === nextProps.onQueueUpdate &&
+    prevProps.onAddLog === nextProps.onAddLog
+  );
+});
+
+// Export memoized component
 export default WorkflowBoard; 

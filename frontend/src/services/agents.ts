@@ -19,16 +19,38 @@ const AGENTS_ENDPOINTS = {
 // Define agent creation data type
 interface CreateAgentData {
   name: string;
-  description?: string;
-  agent_type?: string;
-  model_provider?: string;
-  model_name?: string;
-  system_prompt?: string;
-  temperature?: number;
-  max_tokens?: number;
-  api_key?: string;
-  configuration?: any;
-  is_active?: boolean;
+  description: string;
+  type: string;
+  capabilities?: string[];
+  llmConfig: {
+    provider: string;
+    model: string;
+    deployment: "online" | "local";
+    apiKey: string;
+    localConfig?: {
+      host: string;
+      port: string;
+      endpoint: string;
+    };
+    localEndpoints?: Array<{
+      id: string;
+      name: string;
+      host: string;
+      port: string;
+      endpoint: string;
+      model: string;
+      isActive: boolean;
+    }>;
+  };
+  settings: {
+    autoResponse: boolean;
+    learning: boolean;
+    maxConcurrency: number;
+    temperature: number;
+    maxTokens: number;
+  };
+  parent_agent_id?: number;
+  user_id?: number;
 }
 
 // Helper function to handle both old and new response formats

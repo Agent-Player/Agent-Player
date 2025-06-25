@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import config from '../../../config';
+import { agentsService } from '../../../services/agents';
 
 interface TestAgentModalProps {
   isOpen: boolean;
@@ -44,72 +44,41 @@ const TestAgentModal: React.FC<TestAgentModalProps> = ({
       return;
     }
 
-    // If API key input is shown and user hasn't provided one
     if (showApiKeyInput && !openaiKey.trim()) {
       alert('Please enter your OpenAI API Key');
       return;
     }
 
     setIsLoading(true);
-    setTestResult(null); // Clear previous result
+    setTestResult(null);
 
     try {
-      const requestBody: { message: string; openai_api_key?: string } = {
-        message: testMessage
-      };
+      const result = await agentsService.testAgent(agentId, testMessage);
 
-      // Only include API key if user has provided one manually
-      if (openaiKey.trim()) {
-        requestBody.openai_api_key = openaiKey;
-      }
-
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`${config.api.baseURL}/api/v1/agents/${agentId}/test`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result: TestResponse = await response.json();
-      
       // Debug: Enhanced logging
       console.log('🔍 Test Agent Response (Full):', JSON.stringify(result, null, 2));
       console.log('🔍 Response Success:', result.success);
-      console.log('🔍 Response Data Exists:', !!result.data);
-      console.log('🔍 Response Data Fields:', result.data ? Object.keys(result.data) : 'No data');
+      console.log('🔍 Response Data Exists:', !!result.result);
       
-      // Validate the response structure
-      if (result.success && result.data) {
-        console.log('✅ Valid success response with data');
-        console.log('🔍 Data fields check:', {
-          agent_name: !!result.data.agent_name,
-          model: !!result.data.model,
-          user_message: !!result.data.user_message,
-          ai_response: !!result.data.ai_response,
-          response_time: !!result.data.response_time
-        });
-      }
-      
+      const responseData: TestResponse = {
+        success: result.success,
+        data: result.result,
+        message: result.error || (result.success ? 'Test successful' : 'Test failed'),
+      };
+
       // If failed due to missing API key, show the API key input for manual override
-      if (!result.success && result.message?.includes('API key')) {
+      if (!responseData.success && responseData.message?.includes('API key')) {
         setShowApiKeyInput(true);
         // Update the result message to be more informative
         setTestResult({
-          ...result,
+          ...responseData,
           message: 'No API key found for this agent. Please enter your OpenAI API key below to test the agent.'
         });
       } else {
         // Force state update with small delay to ensure re-render
         setTimeout(() => {
-          console.log('🔄 Setting test result:', result);
-          setTestResult(result);
+          console.log('🔄 Setting test result:', responseData);
+          setTestResult(responseData);
         }, 50);
       }
 

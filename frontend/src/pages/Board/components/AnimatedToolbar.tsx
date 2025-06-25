@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ConnectionType } from './WorkflowBoard';
 
@@ -24,7 +24,7 @@ interface AnimatedToolbarProps {
   onToggleChat: () => void;
 }
 
-export const AnimatedToolbar: React.FC<AnimatedToolbarProps> = ({
+export const AnimatedToolbar: React.FC<AnimatedToolbarProps> = React.memo(({
   boardName,
   setBoardName,
   agentId,
@@ -48,6 +48,50 @@ export const AnimatedToolbar: React.FC<AnimatedToolbarProps> = ({
   const navigate = useNavigate();
   const [animatedIcons, setAnimatedIcons] = useState<Set<string>>(new Set());
   const [isEditingBoardName, setIsEditingBoardName] = useState(false);
+
+  // Use refs to track animation state
+  const animationStateRef = useRef<Record<string, boolean>>({});
+  const animationTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
+
+  // Memoize animation handlers
+  const startAnimation = useCallback((id: string, duration: number = 1000) => {
+    // Skip if already animating
+    if (animationStateRef.current[id]) return;
+    
+    console.log(`🎯 Starting animation for: ${id} (${duration / 1000} second${duration !== 1000 ? 's' : ''})`);
+    animationStateRef.current[id] = true;
+
+    // Clear any existing timer
+    if (animationTimersRef.current[id]) {
+      clearTimeout(animationTimersRef.current[id]);
+    }
+
+    // Set auto-stop timer
+    animationTimersRef.current[id] = setTimeout(() => {
+      console.log(`⏰ Auto-stopping animation for: ${id}`);
+      animationStateRef.current[id] = false;
+    }, duration);
+  }, []);
+
+  const stopAnimation = useCallback((id: string) => {
+    if (!animationStateRef.current[id]) return;
+    
+    console.log(`🛑 Stopping animation for: ${id}`);
+    animationStateRef.current[id] = false;
+
+    // Clear timer
+    if (animationTimersRef.current[id]) {
+      clearTimeout(animationTimersRef.current[id]);
+      delete animationTimersRef.current[id];
+    }
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(animationTimersRef.current).forEach(timer => clearTimeout(timer));
+    };
+  }, []);
 
   const handleGoBack = () => navigate('/dashboard');
 
@@ -862,4 +906,4 @@ export const AnimatedToolbar: React.FC<AnimatedToolbarProps> = ({
       </div>
     </div>
   );
-}; 
+}); 

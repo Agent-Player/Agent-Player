@@ -6,14 +6,14 @@ alwaysApply: true
 # AUTH API ENDPOINTS - IMPLEMENTATION RULES
 
 ## Auth API Overview
-- **Base Path:** `/api/auth/`
+- **Base Path:** `/auth/`
 - **Total Endpoints:** 8 endpoints
 - **Authentication:** JWT Bearer Tokens
 - **Rate Limiting:** 10 requests/minute per IP
 
 ## MANDATORY Auth Endpoints Implementation
 
-### **1. POST /api/auth/login - User Login**
+### **1. POST /auth/login - User Login**
 ```python
 @router.post("/login", response_model=LoginResponse)
 async def login(
@@ -64,7 +64,7 @@ async def login(
     # MANDATORY: Return tokens and user info
 ```
 
-### **2. POST /api/auth/register - User Registration**
+### **2. POST /auth/register - User Registration**
 ```python
 @router.post("/register", response_model=RegisterResponse, status_code=201)
 async def register(
@@ -103,7 +103,7 @@ async def register(
     # MANDATORY: Log registration attempt
 ```
 
-### **3. POST /api/auth/refresh - Token Refresh**
+### **3. POST /auth/refresh - Token Refresh**
 ```python
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh_token(
@@ -128,7 +128,7 @@ async def refresh_token(
     # MANDATORY: Return new tokens
 ```
 
-### **4. POST /api/auth/logout - User Logout**
+### **4. POST /auth/logout - User Logout**
 ```python
 @router.post("/logout", response_model=LogoutResponse)
 async def logout(
@@ -149,7 +149,7 @@ async def logout(
     # MANDATORY: Clear user cache
 ```
 
-### **5. GET /api/auth/me - Current User Info**
+### **5. GET /auth/me - Current User Info**
 ```python
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
@@ -171,7 +171,7 @@ async def get_current_user_info(
     # MANDATORY: Update last activity
 ```
 
-### **6. POST /api/auth/verify-email - Email Verification**
+### **6. POST /auth/verify-email - Email Verification**
 ```python
 @router.post("/verify-email", response_model=VerificationResponse)
 async def verify_email(
@@ -193,7 +193,7 @@ async def verify_email(
     # MANDATORY: Log verification event
 ```
 
-### **7. POST /api/auth/forgot-password - Password Reset Request**
+### **7. POST /auth/forgot-password - Password Reset Request**
 ```python
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
 async def forgot_password(
@@ -216,7 +216,7 @@ async def forgot_password(
     # MANDATORY: Apply rate limiting
 ```
 
-### **8. POST /api/auth/reset-password - Password Reset Confirmation**
+### **8. POST /auth/reset-password - Password Reset Confirmation**
 ```python
 @router.post("/reset-password", response_model=ResetPasswordResponse)
 async def reset_password(

@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import WorkflowBoard, { type WorkflowBoardHandle, type ConnectionType } from './components/WorkflowBoard';
 import { AnimatedToolbar } from './components/AnimatedToolbar';
@@ -48,43 +48,60 @@ interface LogEntry {
 const BoardPage: React.FC = () => {
   const { agentId } = useParams<{ agentId: string }>();
   
-  // Initialize board name from localStorage or use default
-  const [boardName, setBoardName] = useState<string>(() => {
-    const savedBoardName = localStorage.getItem('currentBoardName');
-    if (savedBoardName) {
-      console.log('📋 Loaded board name from storage:', savedBoardName);
-      return savedBoardName;
-    }
-    return agentId ? `Agent ${agentId} Board` : 'Training Workflow Board';
-  });
+  console.log('🎯 BoardPage loaded with agentId:', agentId);
   
-  // Panel state
+  // Memoize initial state
+  const initialState = useMemo(() => {
+    // Create a more readable board ID using agent ID if available
+    const timestamp = Date.now().toString().slice(-6);
+    const boardId = agentId 
+      ? `BOARD-${agentId}-${timestamp}`
+      : `BOARD-${timestamp}`;
+
+    return {
+      isInitialized: false,
+      boardId,
+      boardName: localStorage.getItem('currentBoardName') || 
+                 (agentId ? `Agent ${agentId} Board` : 'Training Workflow Board')
+    };
+  }, [agentId]);
+
+  // State declarations
+  const [isLoading, setIsLoading] = useState(true);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [boardName, setBoardName] = useState(initialState.boardName);
   const [showComponentLibrary, setShowComponentLibrary] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<ChildAgent | undefined>();
-  
-  // Add help dialog state
   const [showHelpDialog, setShowHelpDialog] = useState(false);
-  
-  // Panel sizing controls
   const [logHeight, setLogHeight] = useState(400);
-  
   const [liveMode, setLiveMode] = useState(true);
   const [connectionType, setConnectionType] = useState<ConnectionType>('curved');
   const [showMinimap, setShowMinimap] = useState<boolean>(false);
-  const [boardId] = useState(`BOARD-${Date.now().toString().slice(-6)}`);
+  const [boardId] = useState(initialState.boardId);
+  
+  // Refs
+  const isInitializedRef = useRef(initialState.isInitialized);
   const workflowBoardRef = useRef<WorkflowBoardHandle>(null);
 
-  // Add queue data state
+  // Queue data state
   const [queueData, setQueueData] = useState<QueueData>({
     queueItems: [],
     currentProcessingIndex: 0,
     isSequentialMode: true
   });
 
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  // Stable functions
+  const addLog = useCallback((entry: Omit<LogEntry, 'id' | 'timestamp'>) => {
+    const newLog: LogEntry = {
+      ...entry,
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      timestamp: new Date()
+    };
+    setLogs(prev => [newLog, ...prev].slice(0, 1000));
+  }, []);
 
   // Callback to receive queue updates
   const handleQueueUpdate = (newQueueData: QueueData) => {
@@ -132,28 +149,165 @@ const BoardPage: React.FC = () => {
   };
 
   // Log management functions
-  const addLog = (entry: Omit<LogEntry, 'id' | 'timestamp'>) => {
-    const newLog: LogEntry = {
-      ...entry,
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      timestamp: new Date()
-    };
-    setLogs(prev => [newLog, ...prev].slice(0, 1000)); // Keep only last 1000 logs
-  };
-
   const clearLogs = () => {
     setLogs([]);
   };
 
-  // Initialize with welcome log
+  // Initialize board using useLayoutEffect to prevent flashing
+  useLayoutEffect(() => {
+    const initializeBoard = async () => {
+      // Skip if already initialized
+      if (isInitializedRef.current) {
+        console.log('⚡ Board already initialized, skipping...');
+        return;
+      }
+
+      try {
+        console.log(`🎯 Starting board initialization for agent #${agentId}`);
+        
+        // Mark as initialized immediately
+        isInitializedRef.current = true;
+
+        // Simulate loading for better UX
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        if (!agentId) {
+          console.log('⚠️ No agent ID provided');
+          addLog({
+            type: 'info',
+            source: 'System',
+            message: 'Welcome to the Board! Get started by adding components.',
+          });
+        } else {
+          addLog({
+            type: 'info',
+            source: 'Training System',
+            message: `Training Board initialized for Agent #${agentId}`,
+            details: { boardId, agentId, boardType: 'training' }
+          });
+          
+          addLog({
+            type: 'success',
+            source: 'Training System',
+            message: 'Ready to build AI agent training workflows',
+            details: { instructions: 'Use the component library on the left to add workflow elements' }
+          });
+        }
+      } catch (error) {
+        console.error('Error initializing board:', error);
+        addLog({
+          type: 'error',
+          source: 'System',
+          message: 'Failed to initialize board',
+          details: { error: String(error) }
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeBoard();
+
+    // Cleanup function
+    return () => {
+      console.log('🧹 Cleaning up board...');
+      isInitializedRef.current = false;
+    };
+  }, [agentId, addLog, boardId]);
+
+  // Handle WebSocket connection error gracefully
   useEffect(() => {
-    addLog({
-      type: 'info',
-      source: 'System',
-      message: 'Board initialized successfully',
-      details: { boardId: '158831' }
-    });
-  }, []);
+    const handleWebSocketError = (event: ErrorEvent) => {
+      if (event.message.includes('WebSocket')) {
+        console.log('💡 WebSocket connection failed - continuing in offline mode');
+        addLog({
+          type: 'warning',
+          source: 'System',
+          message: 'WebSocket connection failed - continuing in offline mode',
+          details: { feature: 'real-time updates disabled' }
+        });
+      }
+    };
+
+    window.addEventListener('error', handleWebSocketError);
+    return () => window.removeEventListener('error', handleWebSocketError);
+  }, [addLog]);
+
+  // Save board name to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('currentBoardName', boardName);
+    console.log('💾 Board name saved to storage:', boardName);
+  }, [boardName]);
+
+  // Add board info to logs on initialization
+  useEffect(() => {
+    if (!isLoading) {
+      addLog({
+        type: 'info',
+        source: 'System',
+        message: `Board Information`,
+        details: { 
+          boardId: boardId,
+          agentId: agentId || 'None',
+          type: agentId ? 'Training Board' : 'Generic Board',
+          created: new Date().toISOString()
+        }
+      });
+    }
+  }, [isLoading, boardId, agentId, addLog]);
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+      }}>
+        <div style={{
+          fontSize: '24px',
+          color: 'white',
+          marginBottom: '20px',
+          textAlign: 'center'
+        }}>
+          {agentId ? (
+            <>
+              <div>🎓 Initializing Training Board</div>
+              <div style={{ fontSize: '16px', opacity: 0.8, marginTop: '8px' }}>
+                Preparing workspace for Agent #{agentId}
+              </div>
+            </>
+          ) : (
+            <>
+              <div>🎯 Loading Board</div>
+              <div style={{ fontSize: '16px', opacity: 0.8, marginTop: '8px' }}>
+                Setting up your workspace
+              </div>
+            </>
+          )}
+        </div>
+        <div style={{
+          width: '50px',
+          height: '50px',
+          border: '3px solid rgba(255, 255, 255, 0.3)',
+          borderTop: '3px solid white',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+        }} />
+        <style>
+          {`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}
+        </style>
+      </div>
+    );
+  }
 
   // Simplified panel management - no complex layouts needed
 
@@ -200,6 +354,7 @@ const BoardPage: React.FC = () => {
       }}>
         <WorkflowBoard
           ref={workflowBoardRef}
+          boardId={boardId}
           onToggleLog={() => setShowLog(!showLog)}
           showLog={showLog}
           onToggleHelp={() => setShowHelpDialog(true)}
@@ -207,6 +362,30 @@ const BoardPage: React.FC = () => {
           onQueueUpdate={handleQueueUpdate}
           onAddLog={addLog}
         />
+
+        {/* Agent Training Board Info - Show when we have an agentId */}
+        {agentId && (
+          <div style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: 'rgba(102, 126, 234, 0.9)',
+            color: 'white',
+            padding: '12px 18px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+            fontSize: '14px',
+            fontWeight: '500',
+            zIndex: 1000,
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)'
+          }}>
+            🎓 Training Board for Agent #{agentId}
+            <div style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px' }}>
+              Build workflows to train your AI agent
+            </div>
+          </div>
+        )}
 
         {/* Component Library - Fixed Left Sidebar */}
         {showComponentLibrary && (

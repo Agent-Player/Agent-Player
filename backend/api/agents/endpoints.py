@@ -13,24 +13,27 @@ from models.agent import (
 from models.shared import SuccessResponse
 from core.dependencies import get_current_user, get_optional_user
 from services.agent_service import AgentService
+from config.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Initialize router and service
-router = APIRouter(prefix="/agents", tags=["Agents"])
+router = APIRouter(tags=["Agents"])
 agent_service = AgentService()
 
 @router.get("", response_model=SuccessResponse)
 async def get_all_agents(
     agent_type: Optional[str] = Query(None, pattern="^(main|child)$"),
-    current_user: Optional[Dict] = Depends(get_optional_user)
+    current_user: Optional[Dict] = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Get all agents with optional filtering"""
     try:
         if agent_type == "main":
-            agents = agent_service.get_main_agents()
+            agents = await agent_service.get_main_agents(db)
         elif agent_type == "child":
-            agents = agent_service.get_child_agents()
+            agents = await agent_service.get_child_agents(db)
         else:
-            agents = agent_service.get_all_agents()
+            agents = await agent_service.get_all_agents(db)
         
         return SuccessResponse(
             message=f"Found {len(agents)} agents",
@@ -40,10 +43,10 @@ async def get_all_agents(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/main", response_model=SuccessResponse)
-async def get_main_agents():
+async def get_main_agents(db: AsyncSession = Depends(get_db)):
     """Get main agents only"""
     try:
-        agents = agent_service.get_main_agents()
+        agents = await agent_service.get_main_agents(db)
         return SuccessResponse(
             message=f"Found {len(agents)} main agents",
             data={"agents": agents, "total": len(agents)}
@@ -52,10 +55,10 @@ async def get_main_agents():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/child", response_model=SuccessResponse)
-async def get_child_agents():
+async def get_child_agents(db: AsyncSession = Depends(get_db)):
     """Get child agents only"""
     try:
-        agents = agent_service.get_child_agents()
+        agents = await agent_service.get_child_agents(db)
         return SuccessResponse(
             message=f"Found {len(agents)} child agents",
             data={"agents": agents, "total": len(agents)}
@@ -64,10 +67,10 @@ async def get_child_agents():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{agent_id}", response_model=SuccessResponse)
-async def get_agent_by_id(agent_id: int):
+async def get_agent_by_id(agent_id: int, db: AsyncSession = Depends(get_db)):
     """Get specific agent by ID"""
     try:
-        agent = agent_service.get_agent_by_id(agent_id)
+        agent = await agent_service.get_agent_by_id(db, agent_id)
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
         
@@ -83,14 +86,16 @@ async def get_agent_by_id(agent_id: int):
 @router.post("", response_model=SuccessResponse)
 async def create_agent(
     request: AgentCreateRequest,
-    current_user: Dict = Depends(get_current_user)
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Create new agent"""
     try:
         # Set user_id from current user
         request.user_id = current_user["user_id"]
         
-        agent_id = agent_service.create_agent(
+        agent_id = await agent_service.create_agent(
+            db=db,
             name=request.name,
             description=request.description,
             agent_type=request.agent_type,
@@ -114,14 +119,16 @@ async def create_agent(
 @router.post("/child", response_model=SuccessResponse)
 async def create_child_agent(
     request: ChildAgentCreateRequest,
-    current_user: Dict = Depends(get_current_user)
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Create new child agent"""
     try:
         # Set user_id from current user
         request.user_id = current_user["user_id"]
         
-        agent_id = agent_service.create_agent(
+        agent_id = await agent_service.create_agent(
+            db=db,
             name=request.name,
             description=request.description,
             agent_type="child",
@@ -146,11 +153,12 @@ async def create_child_agent(
 async def update_agent(
     agent_id: int, 
     request: AgentUpdateRequest,
-    current_user: Dict = Depends(get_current_user)
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Update existing agent"""
     try:
-        success = agent_service.update_agent(agent_id, request.dict(exclude_unset=True))
+        success = await agent_service.update_agent(db, agent_id, request.dict(exclude_unset=True))
         if not success:
             raise HTTPException(status_code=404, detail="Agent not found")
         
@@ -166,11 +174,12 @@ async def update_agent(
 @router.delete("/{agent_id}", response_model=SuccessResponse)
 async def delete_agent(
     agent_id: int,
-    current_user: Dict = Depends(get_current_user)
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Delete agent"""
     try:
-        success = agent_service.delete_agent(agent_id)
+        success = await agent_service.delete_agent(db, agent_id)
         if not success:
             raise HTTPException(status_code=404, detail="Agent not found")
         
@@ -187,11 +196,12 @@ async def delete_agent(
 async def test_agent(
     agent_id: int, 
     request: AgentTestRequest,
-    current_user: Dict = Depends(get_current_user)
+    current_user: Dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Test agent with a message"""
     try:
-        result = agent_service.test_agent(agent_id, request.message)
+        result = await agent_service.test_agent(db, agent_id, request.message)
         
         # Check if there was an error
         if result.get("status") == "error":
@@ -232,10 +242,10 @@ async def test_agent(
         )
 
 @router.get("/{agent_id}/children", response_model=SuccessResponse)
-async def get_agent_children(agent_id: int):
+async def get_agent_children(agent_id: int, db: AsyncSession = Depends(get_db)):
     """Get child agents of a specific agent"""
     try:
-        children = agent_service.get_agent_children(agent_id)
+        children = await agent_service.get_agent_children(db, agent_id)
         return SuccessResponse(
             message=f"Found {len(children)} child agents",
             data={"children": children, "total": len(children)}
@@ -244,10 +254,10 @@ async def get_agent_children(agent_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/statistics/overview", response_model=SuccessResponse)
-async def get_agent_statistics():
+async def get_agent_statistics(db: AsyncSession = Depends(get_db)):
     """Get agent statistics"""
     try:
-        stats = agent_service.get_agent_statistics()
+        stats = await agent_service.get_agent_statistics(db)
         return SuccessResponse(
             message="Statistics retrieved",
             data=stats
@@ -256,10 +266,10 @@ async def get_agent_statistics():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{agent_id}/performance", response_model=SuccessResponse)
-async def get_agent_performance(agent_id: int):
+async def get_agent_performance(agent_id: int, db: AsyncSession = Depends(get_db)):
     """Get agent performance metrics"""
     try:
-        performance = agent_service.get_agent_performance(agent_id)
+        performance = await agent_service.get_agent_performance(db, agent_id)
         if not performance:
             raise HTTPException(status_code=404, detail="Agent not found")
         

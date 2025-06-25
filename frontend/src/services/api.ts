@@ -32,13 +32,29 @@ const api: AxiosInstance = axios.create({
     "Content-Type": "application/json",
     Accept: "application/json",
   },
-  timeout: 30000,
+  timeout: 10000, // Default timeout reduced to 10 seconds
   withCredentials: false,
+  // Add retry configuration
+  retryConfig: {
+    retries: 2,
+    retryDelay: 1000,
+    retryCondition: (error: any) => {
+      return (
+        axios.isAxiosError(error) &&
+        (error.code === "ECONNABORTED" ||
+          error.code === "ETIMEDOUT" ||
+          (error.response && error.response.status >= 500))
+      );
+    },
+  },
 });
 
 // Add request interceptor for debugging
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // Add request timestamp for timeout tracking
+    config.metadata = { startTime: new Date() };
+
     console.log(
       `🌐 API Request: ${config.method?.toUpperCase()} ${config.url}`,
       {
@@ -46,6 +62,7 @@ api.interceptors.request.use(
         fullUrl: `${config.baseURL}${config.url}`,
         headers: config.headers,
         data: config.data,
+        timeout: config.timeout,
       }
     );
 
@@ -71,43 +88,72 @@ api.interceptors.request.use(
   }
 );
 
-// Handle responses and errors
+// Handle responses and errors with retry logic
 api.interceptors.response.use(
   (response) => {
+    // Calculate request duration
+    const duration = response.config.metadata
+      ? new Date().getTime() -
+        new Date(response.config.metadata.startTime).getTime()
+      : 0;
+
     console.log(`✅ API Response: ${response.status}`, {
       url: response.config.url,
       status: response.status,
+      duration: `${duration}ms`,
       data: response.data,
     });
     return response;
   },
-  (error) => {
+  async (error) => {
+    const retryConfig = api.defaults.retryConfig;
+
+    // Get the original request configuration
+    const originalRequest = error.config;
+
+    // Check if we should retry the request
+    if (
+      retryConfig &&
+      (!originalRequest._retry ||
+        originalRequest._retry < retryConfig.retries) &&
+      retryConfig.retryCondition(error)
+    ) {
+      originalRequest._retry = (originalRequest._retry || 0) + 1;
+
+      // Wait before retrying
+      await new Promise((resolve) =>
+        setTimeout(resolve, retryConfig.retryDelay)
+      );
+
+      // Increase timeout for retry
+      originalRequest.timeout = originalRequest.timeout * 1.5;
+
+      console.log(`🔄 Retrying request (attempt ${originalRequest._retry}):`, {
+        url: originalRequest.url,
+        timeout: originalRequest.timeout,
+      });
+
+      return api(originalRequest);
+    }
+
     console.error("❌ API Response Error:", {
       url: error.config?.url,
       status: error.response?.status,
       statusText: error.response?.statusText,
       data: error.response?.data,
       message: error.message,
+      retryAttempts: error.config?._retry || 0,
     });
 
-    // Log for debugging
     if (error.response?.status === 401) {
-      console.log("API: 401 error on:", error.config?.url);
-      console.warn(
-        "🔒 Received 401 Unauthorized, clearing auth data and redirecting to login"
-      );
-
-      // Clear expired/invalid token data
+      console.warn("🔒 Received 401 Unauthorized, clearing auth data");
       clearAuthData();
 
-      // Redirect to login page if not already there
       if (window.location.pathname !== "/login") {
         window.location.href = "/login";
       }
     }
 
-    // Don't auto-redirect on 401 - let ProtectedRoute handle it
-    // This prevents the race condition that causes white screen
     return Promise.reject(error);
   }
 );
