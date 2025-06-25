@@ -1,0 +1,10 @@
+# Dpro AI Agent Environment Variables 
+DATABASE_URL=sqlite:///./dpro_agent.db 
+HOST=0.0.0.0 
+PORT=8000 
+DEBUG=True 
+OPENAI_API_KEY=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 
+ANTHROPIC_API_KEY=your_anthropic_key_here 
+SECRET_KEY=your-super-secret-key-change-this 
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000 
+LOG_LEVEL=INFO 

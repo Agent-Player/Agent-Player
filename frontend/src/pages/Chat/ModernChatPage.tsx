@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { chatService, agentsService } from '../../services';
 import './ChatPage.css';
+// Avatar system removed - keeping only audio waves for voice chat
 
 // Simple interface icons without external dependencies
 const Icons = {
@@ -192,6 +193,14 @@ const ModernChatPage: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [backendError, setBackendError] = useState(false);
   
+  // Voice Chat States
+  const [isListening, setIsListening] = useState(false);
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [showVoicePanel, setShowVoicePanel] = useState(false);
+  
+  // Simple audio waves for voice feedback only
+  
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -373,6 +382,40 @@ const ModernChatPage: React.FC = () => {
       sendMessage();
     }
   };
+
+  // Voice Chat Functions
+  const startListening = () => {
+    setIsListening(true);
+    setShowVoicePanel(true);
+    
+    // Simulate audio level animation
+    const audioInterval = setInterval(() => {
+      setAudioLevel(Math.random() * 100);
+    }, 100);
+    
+    // Stop after 5 seconds (demo)
+    setTimeout(() => {
+      setIsListening(false);
+      clearInterval(audioInterval);
+      setAudioLevel(0);
+      
+      // Simulate voice message processing
+      setTimeout(() => {
+        setMessageInput("Hello! This is a voice message that was converted to text.");
+      }, 500);
+    }, 5000);
+  };
+
+  const stopListening = () => {
+    setIsListening(false);
+    setAudioLevel(0);
+  };
+
+  const toggleVoicePanel = () => {
+    setShowVoicePanel(!showVoicePanel);
+  };
+
+  // Avatar system removed - using simple audio waves only
   
   // Filter conversations by search
   const filteredConversations = conversations.filter(conv =>
@@ -626,8 +669,13 @@ const ModernChatPage: React.FC = () => {
                 <Icons.Paperclip />
               </button>
               
-              <button className="action-button" title="Voice Message">
+              <button 
+                onClick={isListening ? stopListening : startListening}
+                className={`action-button voice-button ${isListening ? 'listening' : ''}`} 
+                title={isListening ? 'Stop Recording' : 'Voice Message'}
+              >
                 <Icons.Mic />
+                {isListening && <div className="recording-pulse" />}
               </button>
             </div>
             
@@ -653,6 +701,76 @@ const ModernChatPage: React.FC = () => {
         </div>
       </div>
       
+      {/* Voice Chat Panel */}
+      {showVoicePanel && (
+        <div className="voice-panel-overlay">
+          <div className="voice-panel">
+            <div className="voice-header">
+              <h3>🎤 Voice Chat</h3>
+              <button 
+                onClick={toggleVoicePanel}
+                className="action-button"
+              >
+                <Icons.X />
+              </button>
+            </div>
+            
+            {/* Avatar Display */}
+            <div className="avatar-container">
+              <div className={`avatar-circle ${isAISpeaking ? 'speaking' : ''}`}>
+                <div className="audio-visualization">
+                  <div className="audio-circle">
+                    <Icons.Mic />
+                  </div>
+                </div>
+                
+                {/* Audio Waves */}
+                {(isListening || isAISpeaking) && (
+                  <div className="audio-waves">
+                    {[...Array(8)].map((_, i) => (
+                      <div 
+                        key={i}
+                        className="wave"
+                        style={{
+                          height: `${audioLevel * (0.5 + Math.sin(Date.now() * 0.01 + i) * 0.5)}%`,
+                          animationDelay: `${i * 0.1}s`
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+            
+            {/* Voice Status */}
+            <div className="voice-status">
+              <div className="simple-status-text">
+                {isListening ? (
+                  "Recording..."
+                ) : isAISpeaking ? (
+                  "AI is speaking..."
+                ) : (
+                  "Voice Device Ready"
+                )}
+              </div>
+            </div>
+            
+            {/* Voice Controls */}
+            <div className="voice-controls">
+              <button
+                onClick={() => setIsAISpeaking(!isAISpeaking)}
+                className="voice-control-button mute-only"
+              >
+                {isAISpeaking ? '🔇' : '🔊'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Avatar system removed - using simple audio waves only */}
+
       {/* Advanced Settings Modal */}
       {showSettings && <AdvancedSettingsModal onClose={() => setShowSettings(false)} agents={agents} />}
     </div>
@@ -712,9 +830,12 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
       retention_days: 90,
       uploaded_files: [],
       watch_folder_enabled: false,
-      watch_folder_path: '',
+      watch_paths: [], // Array of {id, name, path, enabled, type}
       auto_sync_folder: true,
-      sync_interval: 300 // seconds
+      sync_interval: 300, // seconds
+      include_subdirectories: true,
+      file_filters: ['*'], // File patterns like *.pdf, *.txt
+      exclude_patterns: ['node_modules', '.git', 'temp']
     },
     privacy: {
       data_retention: 30,
@@ -840,6 +961,52 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
         }
       }));
     }
+  };
+
+  // Add new watch path
+  const addWatchPath = () => {
+    const pathId = Date.now().toString();
+    const newPath = {
+      id: pathId,
+      name: 'New Watch Path',
+      path: '',
+      enabled: true,
+      type: 'folder' as const,
+      includeSubdirs: true,
+      fileFilters: ['*']
+    };
+    
+    setSettings(prev => ({
+      ...prev,
+      knowledge: {
+        ...prev.knowledge,
+        watch_paths: [...prev.knowledge.watch_paths, newPath]
+      }
+    }));
+  };
+
+  // Remove watch path
+  const removeWatchPath = (pathId: string) => {
+    setSettings(prev => ({
+      ...prev,
+      knowledge: {
+        ...prev.knowledge,
+        watch_paths: prev.knowledge.watch_paths.filter(p => p.id !== pathId)
+      }
+    }));
+  };
+
+  // Update watch path
+  const updateWatchPath = (pathId: string, updates: any) => {
+    setSettings(prev => ({
+      ...prev,
+      knowledge: {
+        ...prev.knowledge,
+        watch_paths: prev.knowledge.watch_paths.map(p => 
+          p.id === pathId ? { ...p, ...updates } : p
+        )
+      }
+    }));
   };
 
   const ToggleSwitch = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
@@ -1248,7 +1415,7 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
         </div>
 
         <div className="supported-types">
-          <strong>الأنواع المدعومة:</strong>
+          <strong>Supported Types:</strong>
           {settings.knowledge.file_types.map((type) => (
             <span key={type} className="file-type-badge">{type.toUpperCase()}</span>
           ))}
@@ -1261,8 +1428,8 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
         {settings.knowledge.uploaded_files.length === 0 ? (
           <div className="empty-files-state">
             <Icons.Upload size={48} />
-            <p>لم يتم رفع أي ملفات بعد</p>
-            <p className="empty-subtitle">ارفع ملفاتك ليتذكرها الذكاء الاصطناعي</p>
+            <p>No files uploaded yet</p>
+            <p className="empty-subtitle">Upload your files for AI to remember</p>
           </div>
         ) : (
           <>
@@ -1327,16 +1494,16 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
         <h3><Icons.Info size={16} /> Usage Examples</h3>
         <div className="usage-examples">
           <div className="example-item">
-            <strong>💼 سجل الزبائن:</strong> ارفع ملف Excel بمعلومات الزبائن، واسأل "ما هو رقم هاتف أحمد محمد؟"
+            <strong>💼 Customer Records:</strong> Upload Excel file with customer info, ask "What is John Smith's phone number?"
           </div>
           <div className="example-item">
-            <strong>🛍️ كتالوج المنتجات:</strong> ارفع PDF بالمنتجات، واسأل "ما هو سعر المنتج X؟"
+            <strong>🛍️ Product Catalog:</strong> Upload PDF with products, ask "What is the price of Product X?"
           </div>
           <div className="example-item">
-            <strong>📋 سياسات الشركة:</strong> ارفع وثائق الشركة، واسأل "ما هي سياسة الإجازات؟"
+            <strong>📋 Company Policies:</strong> Upload company documents, ask "What is the vacation policy?"
           </div>
           <div className="example-item">
-            <strong>📊 تقارير مالية:</strong> ارفع التقارير، واسأل "كم كانت الأرباح في الربع الأول؟"
+            <strong>📊 Financial Reports:</strong> Upload reports, ask "What were the profits in Q1?"
           </div>
         </div>
       </div>
@@ -1444,6 +1611,14 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({ onClose, 
       <path d="M5 12h14" stroke="currentColor" strokeWidth="2"/>
     </svg>
   ));
+  
+  Icons.Trash = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 6h18" stroke="currentColor" strokeWidth="2"/>
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" stroke="currentColor" strokeWidth="2"/>
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" stroke="currentColor" strokeWidth="2"/>
+    </svg>
+  );
 
   return (
     <div className="settings-overlay">

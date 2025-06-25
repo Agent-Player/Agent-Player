@@ -18,6 +18,7 @@ export { default as websocketService } from "./websocket";
 export { licenseService } from "./license";
 export { trainingLabService } from "./trainingLab";
 export { marketplaceService } from "./marketplace";
+// export { usersService } from "./users"; // TODO: Create users service file
 
 // Export enums as values (not types)
 export { TaskStatus, TaskPriority } from "./tasks";
@@ -159,3 +160,5 @@ export type {
   LicenseStats,
   LicenseStatus,
 } from "../types/license";
+
+// Avatar system removed - keeping only audio waves for voice chat
