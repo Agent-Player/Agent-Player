@@ -1,22 +1,14 @@
 /**
  * Chat Pages Index
- * Central export for all chat-related pages and components
+ * Modern OpenAI/Claude-inspired chat interface
  */
 
-// Main Chat Page - Shows list of conversations
-export { ChatPage } from "./ChatPage";
+// Import CSS to ensure it's loaded
+import "./ChatPage.css";
 
-// Child Agent Chat Page - The main chat interface with database storage
-export { ChildAgentChat } from "./ChildAgentChat";
+// Main chat page export
+export { default as ChatPage } from "./ModernChatPage";
 
-// Default export - Use the main chat page as default
-export { ChatPage as default } from "./ChatPage";
-
-// Types
-export * from "./types";
-
-// Hooks
-export * from "./hooks";
-
-// Components
-export * from "./components";
+// Alternative exports for flexibility
+export { default as ModernChatPage } from "./ModernChatPage";
+export { SimpleChatPage } from "./SimpleChatPage";

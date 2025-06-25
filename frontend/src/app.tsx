@@ -9,7 +9,7 @@ import LoginPage from './pages/Auth/LoginPage';
 // Import dashboard and other pages
 import DashboardPage from './pages/Dashboard/DashboardPage';
 import ChildAgentPage from './pages/ChildAgent/ChildAgentPage';
-import { ChatPage, ChildAgentChat } from './pages/Chat';
+import { ChatPage } from './pages/Chat';
 import FormBuilderPage from './pages/FormBuilder/FormBuilderPage';
 import AgentPage from './pages/Agent/AgentPage';
 import TasksPage from './pages/Tasks/TasksPage';
@@ -166,7 +166,7 @@ function DashboardLayout() {
           <Route path="agents" element={<AgentPage />} />
           <Route path="child-agents" element={<ChildAgentPage />} />
           <Route path="chat" element={<ChatPage />} />
-          <Route path="chat/:chatId" element={<ChildAgentChat />} />
+          <Route path="chat/:chatId" element={<ChatPage />} />
           <Route path="form-builder" element={<FormBuilderPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="training-lab" element={<TrainingLabPage />} />

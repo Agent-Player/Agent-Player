@@ -6,7 +6,7 @@ import { Sidebar } from './Sidebar';
 import DashboardPage from '../../pages/Dashboard';
 import AgentPage from '../../pages/Agent';
 import BoardPage from '../../pages/Board';
-import { ChatPage, ChildAgentChat } from '../../pages/Chat';
+import { ChatPage } from '../../pages/Chat';
 import SettingsPageNew from '../../pages/Settings/SettingsPageNew';
 import TasksPage from '../../pages/Tasks';
 import { ProfilePage } from '../../pages/Profile';
@@ -37,7 +37,7 @@ export function AppLayout() {
           <Route path="/agents" element={<AgentPage />} />
           <Route path="/board" element={<BoardPage />} />
           <Route path="/chat" element={<ChatPage />} />
-          <Route path="/chat/:chatId" element={<ChildAgentChat />} />
+          <Route path="/chat/:chatId" element={<ChatPage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/marketplace" element={<MarketplacePage />} />
           <Route path="/top-three" element={<TopThreePage />} />
