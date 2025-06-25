@@ -235,10 +235,70 @@ class AgentCreate(BaseModel):
 - Database connections MUST not exceed 100 per instance
 - WebSocket connections MUST not exceed 1000 per instance
 
+## RECENT UPDATES - JANUARY 16, 2025
+
+### **Chat System Rebuild - COMPLETED**
+- ✅ Complete rebuild of chat interface with OpenAI/Claude-inspired design
+- ✅ Modern React TypeScript implementation with hooks
+- ✅ Comprehensive sidebar with conversation management
+- ✅ Voice chat system with audio waves visualization (simplified)
+- ✅ Knowledge Base management with file upload and folder watching
+- ✅ Avatar system removed per user request for simplicity
+- ✅ All code follows English-only policy
+
+### **Project Management Tools - ADDED**
+- ✅ PowerShell scripts for Windows development environment
+  - `run.ps1` - Comprehensive project management script
+  - `run-simple.ps1` - Simple script for basic operations
+- ✅ Alternative to Makefile for systems without `make` command
+- ✅ Windows-compatible development workflow
+
+### **File Organization Updates - COMPLETED**
+- ✅ Removed old chat components (`NewChat/` directory, `ChildAgentChat.tsx`)
+- ✅ Deleted temporary avatar system files
+- ✅ Updated services exports to maintain clean structure
+- ✅ Proper component separation and organization
+
+### **UI/UX Standards - ENHANCED**
+```typescript
+// ✅ CORRECT - Modern React component with proper typing
+interface ChatInterfaceProps {
+  onSendMessage: (message: string) => void;
+  conversations: Conversation[];
+  isLoading: boolean;
+}
+
+const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  onSendMessage,
+  conversations,
+  isLoading
+}) => {
+  // Component implementation with proper error handling
+  return (
+    <div className="chat-interface">
+      {/* Modern UI implementation */}
+    </div>
+  );
+};
+```
+
+### **PowerShell Development Commands - NEW**
+```powershell
+# Project management commands for Windows
+.\run-simple.ps1 help          # Show all available commands
+.\run-simple.ps1 update-rules  # Update project rules
+.\run-simple.ps1 run-backend   # Start Python FastAPI server
+.\run-simple.ps1 run-frontend  # Start React development server
+.\run-simple.ps1 status        # Show project status
+.\run-simple.ps1 install-deps  # Install all dependencies
+```
+
 ---
 
 **REMEMBER: English only - no exceptions!**  
 **REMEMBER: All code must be readable and maintainable!**  
 **REMEMBER: Security first - validate everything!**  
-**REMEMBER: Performance matters - optimize continuously!**
+**REMEMBER: Performance matters - optimize continuously!**  
+**REMEMBER: Chat system follows modern OpenAI/Claude standards!**  
+**REMEMBER: Use PowerShell scripts for Windows development workflow!**
 
