@@ -121,14 +121,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Database files
-*.db
-*.sqlite
-*.sqlite3
-dpro_agent.db
-dpro_agent.db-journal
-dpro_agent.db-wal
-dpro_agent.db-shm
+
 
 # Log files
 logs/
