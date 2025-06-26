@@ -24,7 +24,6 @@ from api.tasks.endpoints import router as tasks_router
 from api.licensing.endpoints import router as licensing_router
 from api.training_lab.endpoints import router as training_lab_router
 from api.marketplace.endpoints import router as marketplace_router
-from api.workflows.endpoints import router as workflows_router
 
 # Configure logging
 logging.basicConfig(
@@ -68,16 +67,36 @@ async def startup_event():
         logger.error(f"Startup error: {e}")
         raise
 
-# Include routers
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """System health check"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+# System status endpoint
+@app.get("/system/status")
+async def system_status():
+    """Detailed system status"""
+    return {
+        "status": "operational",
+        "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT,
+        "debug_mode": settings.DEBUG,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+# Include routers with standardized prefixes
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(agents_router, prefix="/agents", tags=["Agents"])
 app.include_router(chat_router, prefix="/chat", tags=["Chat"])
-app.include_router(users_router, prefix="/users", tags=["Users"])
+app.include_router(users_router, prefix="/user", tags=["Users"])
 app.include_router(tasks_router, prefix="/tasks", tags=["Tasks"])
 app.include_router(licensing_router, prefix="/licensing", tags=["Licensing"])
 app.include_router(training_lab_router, prefix="/training-lab", tags=["Training Lab"])
 app.include_router(marketplace_router, prefix="/marketplace", tags=["Marketplace"])
-app.include_router(workflows_router, prefix="/workflows", tags=["Workflows"])
 
 # Root endpoint
 @app.get("/")
@@ -88,64 +107,6 @@ async def root():
         "version": settings.VERSION,
         "status": "operational"
     }
-
-# Health check endpoint
-@app.get("/health")
-async def health_check(db: AsyncSession = Depends(get_db)):
-    """Application health check"""
-    try:
-        # Test database connection
-        await db.execute("SELECT 1")
-        database_status = "connected"
-    except Exception:
-        database_status = "disconnected"
-    
-    return {
-        "status": "healthy" if database_status == "connected" else "unhealthy",
-        "application": settings.APP_NAME,
-        "version": settings.VERSION,
-        "timestamp": datetime.utcnow().isoformat(),
-        "database": database_status,
-        "debug_mode": settings.DEBUG
-    }
-
-# System status endpoint
-@app.get("/system/status")
-async def system_status(db: AsyncSession = Depends(get_db)):
-    """Detailed system status information"""
-    try:
-        # Get database stats using SQLAlchemy
-        users_count = await db.scalar("SELECT COUNT(*) FROM users")
-        agents_count = await db.scalar("SELECT COUNT(*) FROM agents")
-        conversations_count = await db.scalar("SELECT COUNT(*) FROM conversations")
-        
-        return {
-            "application": settings.APP_NAME,
-            "version": settings.VERSION,
-            "status": "operational",
-            "timestamp": datetime.utcnow().isoformat(),
-            "database": {
-                "status": "connected",
-                "users": users_count or 0,
-                "agents": agents_count or 0,
-                "conversations": conversations_count or 0
-            },
-            "configuration": {
-                "debug": settings.DEBUG,
-                "cors_enabled": True,
-                "api_versions": ["latest"]
-            }
-        }
-    except Exception as e:
-        logger.error(f"System status error: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "message": "Failed to get system status",
-                "timestamp": datetime.utcnow().isoformat()
-            }
-        )
 
 # Global exception handler
 @app.exception_handler(Exception)

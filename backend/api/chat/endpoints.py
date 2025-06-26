@@ -6,7 +6,7 @@ All chat and conversation related routes
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Dict, Any, List, Optional
 from models.chat import (
-    ConversationCreate, ConversationUpdate, MessageCreate,
+    ConversationCreateRequest, ConversationUpdateRequest, MessageCreateRequest,
     ConversationListResponse, ConversationDetailResponse, MessageListResponse,
     ChatAnalyticsResponse, AIResponseRequest
 )
@@ -48,7 +48,7 @@ async def get_conversations(
 
 @router.post("/conversations", response_model=SuccessResponse)
 async def create_conversation(
-    request: ConversationCreate,
+    request: ConversationCreateRequest,
     current_user: Dict = Depends(get_current_user)
 ):
     """Create new conversation"""
@@ -96,7 +96,7 @@ async def get_conversation(
 @router.put("/conversations/{conversation_id}", response_model=SuccessResponse)
 async def update_conversation(
     conversation_id: str,
-    request: ConversationUpdate,
+    request: ConversationUpdateRequest,
     current_user: Dict = Depends(get_current_user)
 ):
     """Update conversation"""
@@ -192,7 +192,7 @@ async def get_conversation_messages(
 @router.post("/conversations/{conversation_id}/messages", response_model=SuccessResponse)
 async def add_message_to_conversation(
     conversation_id: str,
-    request: MessageCreate,
+    request: MessageCreateRequest,
     current_user: Dict = Depends(get_current_user)
 ):
     """Add message to conversation"""

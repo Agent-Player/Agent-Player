@@ -13,7 +13,6 @@ export { default as enhancedChatService } from "./enhancedChat";
 export { default as boardsService } from "./boards";
 export { default as childAgentsService } from "./childAgents";
 export { default as mcpService } from "./mcp";
-export { default as workflowsService } from "./workflows";
 export { default as websocketService } from "./websocket";
 export { licenseService } from "./license";
 export { trainingLabService } from "./trainingLab";
@@ -23,17 +22,20 @@ export { marketplaceService } from "./marketplace";
 // Export enums as values (not types)
 export { TaskStatus, TaskPriority } from "./tasks";
 export { SpecializedRoles, TaskTypes } from "./childAgents";
-export { NodeTypes, TriggerTypes } from "./workflows";
+// Workflow types are now integrated into Board system
 export { WS_EVENTS } from "./websocket";
 
 // Export types for easy access
 export type { User, LoginRequest, RegisterRequest, AuthResponse } from "./auth";
 export type {
   Agent,
+  AgentConfig,
+  AgentStatus,
+  AgentType,
   CreateAgentRequest,
   UpdateAgentRequest,
   AgentListResponse,
-} from "./agents";
+} from "../types";
 export type {
   Task,
   CreateTaskRequest,
@@ -94,29 +96,38 @@ export type {
 export type {
   MCPRequest,
   MCPResponse,
-  MCPServer,
-  MCPTool,
-  MCPSession,
+  MCPStatus,
+  MCPSessionConfig,
   AICommandRequest,
   AICommandResponse,
 } from "./mcp";
 
-// Workflow types
+// Training Lab types
 export type {
-  Workflow,
-  WorkflowNode,
-  WorkflowConnection,
-  WorkflowExecution,
-  WorkflowTemplate,
-  CreateWorkflowRequest,
-  CreateNodeRequest,
-  CreateConnectionRequest,
-  WorkflowAnalytics,
-  NodeType,
-  TriggerType,
-} from "./workflows";
+  TrainingWorkspace,
+  TrainingSession,
+  TrainingTemplate,
+  TrainingAnalytics,
+} from "../types/trainingLab";
 
-// WebSocket types
+// Marketplace types
+export type {
+  MarketplaceItem,
+  MarketplaceCategory,
+  MarketplaceReview,
+  MarketplaceStats,
+} from "../types/marketplace";
+
+// License types (from existing license types)
+export type {
+  LicenseInfo,
+  LicenseStatus,
+  LicenseFeature,
+} from "../types/license";
+
+// Avatar system removed - keeping only audio waves for voice chat
+
+// Type exports from websocket
 export type {
   WebSocketMessage,
   UserPresence,
@@ -127,38 +138,12 @@ export type {
   WSEventType,
 } from "./websocket";
 
-// Training Lab types
+// Type exports from existing types
 export type {
-  TrainingWorkspace,
-  TrainingSession,
-  TrainingAnalytics,
-  TrainingTemplate,
-  WorkspaceTestResult,
-  LLMConfig,
-  TrainingWorkflow,
-} from "../types/trainingLab";
-
-// Marketplace types
-export type {
-  MarketplaceItem,
-  MarketplaceCategory,
-  MarketplaceReview,
-  MarketplacePurchase,
-  MarketplaceSearch,
-  MarketplaceStats,
-  SellerAnalytics,
-} from "../types/marketplace";
-
-// License types (from existing license types)
-export type {
-  License,
-  LicenseInfo,
-  LicenseActivation,
-  OnlineLicenseRequest,
-  OnlineLicenseResponse,
-  LicenseValidation,
-  LicenseStats,
-  LicenseStatus,
-} from "../types/license";
-
-// Avatar system removed - keeping only audio waves for voice chat
+  ApiResponse,
+  BoardNode,
+  BoardEdge,
+  UserSettings,
+  LoadingState,
+  PaginatedResponse,
+} from "../types";
