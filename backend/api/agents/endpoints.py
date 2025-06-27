@@ -118,7 +118,7 @@ async def create_agent(
 
 @router.post("/child", response_model=SuccessResponse)
 async def create_child_agent(
-    request: ChildAgentCreateRequest,
+    request: AgentCreateRequest,  # Use regular AgentCreateRequest instead
     current_user: Dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -127,18 +127,19 @@ async def create_child_agent(
         # Set user_id from current user
         request.user_id = current_user["user_id"]
         
+        # Force agent_type to child
         agent_id = await agent_service.create_agent(
             db=db,
             name=request.name,
-            description=request.description,
-            agent_type="child",
+            description=request.description or "Child agent",
+            agent_type="child",  # Force child type
             model_provider=request.model_provider,
             model_name=request.model_name,
-            system_prompt=request.system_prompt,
+            system_prompt=request.system_prompt or "You are a helpful child agent.",
             temperature=request.temperature,
             max_tokens=request.max_tokens,
             api_key=request.api_key,
-            parent_agent_id=request.parent_agent_id,
+            parent_agent_id=request.parent_agent_id,  # This can be None initially
             user_id=request.user_id
         )
         

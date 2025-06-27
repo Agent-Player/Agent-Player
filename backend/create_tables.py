@@ -7,11 +7,11 @@ import os
 import bcrypt
 from datetime import datetime
 
-# Database path
-db_path = "data/database.db"
+# Database path - MUST be in backend/data according to project rules
+db_path = "backend/data/database.db"
 
 # Create the directory if it doesn't exist
-os.makedirs("data", exist_ok=True)
+os.makedirs("backend/data", exist_ok=True)
 
 # Delete existing database if it exists
 if os.path.exists(db_path):

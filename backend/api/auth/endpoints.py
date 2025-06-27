@@ -21,6 +21,8 @@ except ImportError:
     GOOGLE_AUTH_AVAILABLE = False
     print("Warning: Google OAuth libraries not available. Some features will be disabled.")
 
+print("=== AUTH ENDPOINTS LOADED ===")
+
 # Initialize router and service
 router = APIRouter(tags=["Authentication"])
 auth_service = AuthService()
@@ -28,6 +30,7 @@ auth_service = AuthService()
 @router.post("/login", response_model=SuccessResponse)
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     """User login endpoint"""
+    print("[LOGIN] >>> Received login request")
     try:
         result = await auth_service.login(db, request.email, request.password)
         return SuccessResponse(
@@ -35,9 +38,12 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
             data=result
         )
     except ValueError as e:
+        print(f"[LOGIN] ValueError: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Login failed")
+        print(f"[LOGIN] Exception: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Login failed: {e}")
 
 @router.post("/register/admin", response_model=SuccessResponse)
 async def register_admin(request: RegisterRequest, db: AsyncSession = Depends(get_db)):

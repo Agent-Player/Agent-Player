@@ -56,7 +56,7 @@ interface AgentFormData {
   };
 }
 
-type MainAgentRequest = {
+type AgentRequest = {
   name: string;
   description: string;
   model_provider: string;
@@ -70,21 +70,12 @@ type MainAgentRequest = {
   timeout_seconds: number;
   is_public: boolean;
   is_system: boolean;
+  parent_agent_id?: number; // Optional for child agents
 };
 
-type ChildAgentRequest = {
-  name: string;
-  description: string;
-  parent_agent_id?: number;
-  specialization: string;
-  training_data: Record<string, unknown>;
-  capabilities: string[];
-  learning_enabled: boolean;
-  autonomy_level: string;
-};
+// Types unified into AgentRequest above
 
 const AgentPage: React.FC = () => {
-  const agent = useAgent();
   const { showSuccess, showError, confirm } = useNotificationContext();
   const [activeTab, setActiveTab] = useState<'main' | 'child'>('main');
   const [showBuilder, setShowBuilder] = useState(false);
@@ -223,7 +214,7 @@ const AgentPage: React.FC = () => {
   };
 
   // Show loading state
-  if (agent.loading || loading) {
+  if (loading) {
     return <LoadingState />;
   }
 
@@ -443,7 +434,7 @@ const AgentPage: React.FC = () => {
     
     try {
       // Prepare data for backend based on agent type
-      let agentRequest: MainAgentRequest | ChildAgentRequest;
+      let agentRequest: AgentRequest;
 
       if (builderType === 'main') {
         agentRequest = {
@@ -462,15 +453,22 @@ const AgentPage: React.FC = () => {
           is_system: false
         };
       } else {
+        // Child agent - use same format as main agent but with child-specific values
         agentRequest = {
           name: agentData.name,
-          description: agentData.description || '',
-          parent_agent_id: agentData.parent_agent_id,
-          specialization: agentData.type || 'general',
-          training_data: {},
+          description: agentData.description || 'Child agent',
+          model_provider: agentData.llmConfig?.provider || 'openai',
+          model_name: agentData.llmConfig?.model || 'gpt-3.5-turbo',
+          api_key: agentData.llmConfig?.apiKey || '',
+          system_prompt: 'You are a helpful child agent.',
           capabilities: agentData.capabilities || [],
-          learning_enabled: agentData.settings?.learning || true,
-          autonomy_level: 'supervised'
+          tools_enabled: ['chat', 'analysis'],
+          temperature: agentData.settings?.temperature?.toString() || '0.7',
+          max_tokens: agentData.settings?.maxTokens || 2000,
+          timeout_seconds: 300,
+          is_public: false,
+          is_system: false,
+          parent_agent_id: agentData.parent_agent_id || 4  // Use default parent if not set
         };
       }
 

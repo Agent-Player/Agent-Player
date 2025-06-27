@@ -14,3 +14,14 @@ backend/migrations/**/*
 # Don't apply rules to logs
 backend/logs/**/*
 *.log 
+
+/backup/**/*
+
+# Don't apply rules to environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+**/.env*
+

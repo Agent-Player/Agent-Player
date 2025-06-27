@@ -8,7 +8,8 @@ from datetime import datetime, timedelta
 from core.security import security
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, insert, func, and_
-from models.database import User, Session as UserSession, ActivityLog
+from models.user import User
+from models.database import Session as UserSession, ActivityLog
 import logging
 
 # Create logger
@@ -22,6 +23,7 @@ class AuthService:
     
     async def login(self, db: AsyncSession, email: str, password: str) -> Dict[str, Any]:
         """Login user and return tokens"""
+        print(f"[LOGIN] >>> AuthService.login called for {email}")
         try:
             logger.info(f"🔐 LOGIN: Starting login for email: {email}")
             
@@ -48,15 +50,22 @@ class AuthService:
             
             logger.info(f"🔐 LOGIN: Password verified successfully")
             
+            # Save user data before any commit operations
+            user_id = user.id
+            user_email = user.email
+            user_username = user.username
+            user_full_name = user.full_name
+            user_is_superuser = user.is_superuser
+            
             # Create tokens
             token_data = {
-                "user_id": user.id,
-                "email": user.email,
-                "username": user.username,
-                "role": user.role
+                "user_id": user_id,
+                "email": user_email,
+                "username": user_username,
+                "role": "admin" if user_is_superuser else "user"
             }
             
-            logger.info(f"🔐 LOGIN: Creating tokens for user: {user.id}")
+            logger.info(f"🔐 LOGIN: Creating tokens for user: {user_id}")
             access_token = self.security.create_access_token(token_data)
             refresh_token = self.security.create_refresh_token(token_data)
             
@@ -65,20 +74,20 @@ class AuthService:
             await db.commit()
             
             # Log activity
-            await self._log_activity(db, user.id, "login", "User logged in successfully")
+            await self._log_activity(db, user_id, "login", "User logged in successfully")
             
-            logger.info(f"🔐 LOGIN: Login successful for user: {user.id}")
+            logger.info(f"🔐 LOGIN: Login successful for user: {user_id}")
             
             return {
                 "access_token": access_token,
                 "refresh_token": refresh_token,
                 "token_type": "bearer",
                 "user": {
-                    "id": user.id,
-                    "email": user.email,
-                    "username": user.username,
-                    "full_name": user.full_name,
-                    "role": user.role
+                    "id": user_id,
+                    "email": user_email,
+                    "username": user_username,
+                    "full_name": user_full_name,
+                    "role": "admin" if user_is_superuser else "user"
                 },
                 # For backward compatibility
                 "tokens": {
@@ -169,7 +178,7 @@ class AuthService:
                 "email": user.email,
                 "username": user.username,
                 "full_name": user.full_name,
-                "role": user.role,
+                "role": "admin" if user.is_superuser else "user",
                 "is_active": user.is_active,
                 "created_at": user.created_at,
                 "updated_at": user.updated_at
@@ -216,7 +225,7 @@ class AuthService:
                 "user_id": user.id,
                 "email": user.email,
                 "username": user.username,
-                "role": user.role
+                "role": "admin" if user.is_superuser else "user"
             }
             
             access_token = self.security.create_access_token(token_data)
@@ -237,7 +246,7 @@ class AuthService:
             # Get user statistics
             total_users = await db.scalar(select(func.count()).select_from(User))
             active_users = await db.scalar(select(func.count()).select_from(User).where(User.is_active == True))
-            admin_users = await db.scalar(select(func.count()).select_from(User).where(User.role == 'admin'))
+            admin_users = await db.scalar(select(func.count()).select_from(User).where(User.is_superuser == True))
             
             # Get recent activity
             recent_activity = await db.scalar(
@@ -282,7 +291,7 @@ class AuthService:
                     "email": user.email,
                     "username": user.username,
                     "full_name": user.full_name,
-                    "role": user.role,
+                    "role": "admin" if user.is_superuser else "user",
                     "is_active": user.is_active,
                     "created_at": user.created_at,
                     "updated_at": user.updated_at

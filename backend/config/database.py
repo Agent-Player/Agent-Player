@@ -10,7 +10,13 @@ from config.settings import settings
 
 import logging
 import sqlite3
-from models.database import Base
+from models.base import Base
+
+# Import all models to register them with Base metadata
+import models
+
+import os
+from typing import Generator
 
 # Create logger
 logger = logging.getLogger(__name__)
@@ -61,6 +67,63 @@ async_engine = create_async_engine(
 AsyncSessionLocal = sessionmaker(
     async_engine, class_=AsyncSession, expire_on_commit=False
 )
+
+# Fixed database path - ONLY in backend/data directory
+DATABASE_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATABASE_PATH = os.path.join(DATABASE_DIR, "dpro_agent.db")
+
+def get_database_path() -> str:
+    """Get the absolute path to the database file"""
+    # Ensure directory exists
+    os.makedirs(DATABASE_DIR, exist_ok=True)
+    return os.path.abspath(DATABASE_PATH)
+
+def get_db_connection() -> sqlite3.Connection:
+    """Get database connection with proper configuration"""
+    db_path = get_database_path()
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row  # Enable dict-like access to rows
+    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+    return conn
+
+def get_db() -> Generator[sqlite3.Connection, None, None]:
+    """Database dependency for FastAPI"""
+    conn = get_db_connection()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+def init_database():
+    """Initialize database with required tables"""
+    db_path = get_database_path()
+    print(f"Database initialized at: {db_path}")
+    
+    # Check if database exists and has tables
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Check if users table exists
+    cursor.execute("""
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name='users'
+    """)
+    
+    if cursor.fetchone() is None:
+        print("Database is empty. Please run setup_database_final.py to create tables and test user.")
+    else:
+        print("Database tables exist and ready to use.")
+    
+    conn.close()
+
+# Database configuration
+DATABASE_CONFIG = {
+    "path": DATABASE_PATH,
+    "dir": DATABASE_DIR,
+    "url": f"sqlite:///{DATABASE_PATH}",
+    "echo": False,  # Set to True for SQL logging
+    "check_same_thread": False
+}
 
 def init_db():
     """Initialize database with all models"""

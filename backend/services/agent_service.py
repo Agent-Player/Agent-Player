@@ -6,7 +6,7 @@ Simplified agent management service using SQLAlchemy
 from typing import Dict, Any, Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_, func
-from models.database import Agent
+from models.agent import Agent
 import requests
 import time
 from datetime import datetime
@@ -31,7 +31,7 @@ class AgentService:
     async def get_main_agents(self, db: AsyncSession) -> List[Dict[str, Any]]:
         """Get main agents only"""
         query = select(Agent).where(
-            and_(Agent.agent_type == AgentType.MAIN, Agent.is_active == True)
+            and_(Agent.agent_type == "main", Agent.is_active == True)
         )
         result = await db.execute(query)
         agents = result.scalars().all()
@@ -40,7 +40,7 @@ class AgentService:
     async def get_child_agents(self, db: AsyncSession) -> List[Dict[str, Any]]:
         """Get child agents only"""
         query = select(Agent).where(
-            and_(Agent.agent_type == AgentType.CHILD, Agent.is_active == True)
+            and_(Agent.agent_type == "child", Agent.is_active == True)
         )
         result = await db.execute(query)
         agents = result.scalars().all()
@@ -92,7 +92,7 @@ class AgentService:
             new_agent = Agent(
                 name=name,
                 description=description,
-                agent_type=AgentType(agent_type),
+                agent_type=agent_type,  # Use string directly instead of enum
                 model_provider=model_provider,
                 model_name=model_name,
                 system_prompt=system_prompt,
@@ -221,10 +221,10 @@ class AgentService:
         """Get agent statistics"""
         total = await db.scalar(select(func.count()).select_from(Agent).where(Agent.is_active == True))
         main = await db.scalar(select(func.count()).select_from(Agent).where(
-            and_(Agent.agent_type == AgentType.MAIN, Agent.is_active == True)
+            and_(Agent.agent_type == "main", Agent.is_active == True)
         ))
         child = await db.scalar(select(func.count()).select_from(Agent).where(
-            and_(Agent.agent_type == AgentType.CHILD, Agent.is_active == True)
+            and_(Agent.agent_type == "child", Agent.is_active == True)
         ))
         
         return {
@@ -266,7 +266,7 @@ class AgentService:
             "id": agent.id,
             "name": agent.name,
             "description": agent.description,
-            "agent_type": agent.agent_type.value if isinstance(agent.agent_type, AgentType) else agent.agent_type,
+            "agent_type": agent.agent_type,
             "model_provider": agent.model_provider,
             "model_name": agent.model_name,
             "system_prompt": agent.system_prompt,

@@ -6,10 +6,11 @@ import bcrypt
 from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models.database import Base, User
+from models.database import Base
+from models.user import User
 
 # Database path
-SQLALCHEMY_DATABASE_URL = "sqlite:///data/database.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///backend/data/database.db"
 
 def hash_password_bcrypt(password: str) -> str:
     """Hash password using bcrypt"""

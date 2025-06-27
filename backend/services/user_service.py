@@ -6,7 +6,8 @@ Simplified user management service using SQLAlchemy
 from typing import Dict, Any, Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_, func, desc
-from models.database import User, Session as UserSession
+from models.user import User
+from models.database import Session as UserSession
 from fastapi import HTTPException
 import logging
 

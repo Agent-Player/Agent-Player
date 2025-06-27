@@ -25,7 +25,7 @@ class Settings:
     CORS_ALLOW_HEADERS = ["*"]
     
     # Database
-    DATABASE_URL = "sqlite:///data/database.db"
+    DATABASE_URL = "sqlite:///data/dpro_agent.db"
     DATABASE_ECHO = True
     
     # Security
