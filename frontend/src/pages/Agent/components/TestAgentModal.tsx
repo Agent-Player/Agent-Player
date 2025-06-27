@@ -38,11 +38,12 @@ const TestAgentModal: React.FC<TestAgentModalProps> = ({
   agentName,
   agentId
 }) => {
-  const [testMessage, setTestMessage] = useState('Hello! Can you help me with a quick test?');
+  const [testMessage, setTestMessage] = useState('2+33?');
   const [openaiKey, setOpenaiKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [testResult, setTestResult] = useState<TestResponse | null>(null);
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+
 
   const handleTest = async () => {
     if (!testMessage.trim()) {
@@ -283,7 +284,7 @@ const TestAgentModal: React.FC<TestAgentModalProps> = ({
               fontSize: '14px',
               color: '#155724'
             }}>
-              ✅ This agent will use its configured API key for testing
+              ✅ This agent will use its configured settings for testing
             </div>
           )}
 

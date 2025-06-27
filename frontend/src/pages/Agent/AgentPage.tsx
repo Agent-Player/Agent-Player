@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAgent } from './hooks';
+
 import { LoadingState, ChildAgentConnections } from './components';
 import AgentBuilder from './components/AgentBuilder';
 import TestAgentModal from './components/TestAgentModal';
@@ -28,6 +28,33 @@ interface AgentData {
   specialization?: string;
   learningEnabled?: boolean;
   autonomyLevel?: string;
+  // Local Configuration properties
+  is_local_model?: boolean;
+  local_config?: {
+    host: string;
+    port: number;
+    endpoint: string;
+    model_name?: string;
+  };
+  // Additional endpoints for display
+  additional_endpoints?: {
+    name: string;
+    host: string;
+    port: number;
+    endpoint: string;
+    model: string;
+    is_active: boolean;
+  }[];
+}
+
+interface LocalEndpoint {
+  id: string;
+  name: string;
+  host: string;
+  port: string;
+  endpoint: string;
+  model: string;
+  isActive: boolean;
 }
 
 interface AgentFormData {
@@ -46,6 +73,7 @@ interface AgentFormData {
       port: string;
       endpoint: string;
     };
+    localEndpoints: LocalEndpoint[];
   };
   settings: {
     autoResponse: boolean;
@@ -71,6 +99,22 @@ type AgentRequest = {
   is_public: boolean;
   is_system: boolean;
   parent_agent_id?: number; // Optional for child agents
+  // Local model support
+  is_local_model?: boolean;
+  local_config?: {
+    host: string;
+    port: number;
+    endpoint: string;
+    model_name: string;
+    additional_endpoints?: {
+      name: string;
+      host: string;
+      port: number;
+      endpoint: string;
+      model: string;
+      is_active: boolean;
+    }[];
+  } | null;
 };
 
 // Types unified into AgentRequest above
@@ -431,44 +475,88 @@ const AgentPage: React.FC = () => {
   const handleSaveAgent = async (agentData: AgentFormData) => {
     const isEditing = editingAgent !== null;
     console.log(isEditing ? 'Updating agent:' : 'Creating agent:', agentData);
+    console.log('🏠 Local Configuration received:', {
+      deployment: agentData.llmConfig?.deployment,
+      localConfig: agentData.llmConfig?.localConfig,
+      localEndpoints: agentData.llmConfig?.localEndpoints
+    });
     
     try {
       // Prepare data for backend based on agent type
       let agentRequest: AgentRequest;
 
       if (builderType === 'main') {
+        // Check if it's a local deployment
+        const isLocalDeployment = agentData.llmConfig?.deployment === 'local';
+        
         agentRequest = {
           name: agentData.name,
           description: agentData.description || '',
           model_provider: agentData.llmConfig?.provider || 'openai',
           model_name: agentData.llmConfig?.model || 'gpt-4',
-          api_key: agentData.llmConfig?.apiKey || '',
+          api_key: isLocalDeployment ? '' : (agentData.llmConfig?.apiKey || ''),
           system_prompt: '',
           capabilities: agentData.capabilities || [],
           tools_enabled: ['chat', 'analysis'],
-          temperature: agentData.settings?.temperature?.toString() || '0.7',
+          temperature: (agentData.settings?.temperature || 0.7).toString(),
           max_tokens: agentData.settings?.maxTokens || 4000,
           timeout_seconds: 300,
           is_public: false,
-          is_system: false
+          is_system: false,
+          // Add local model support
+          is_local_model: isLocalDeployment,
+          local_config: isLocalDeployment ? {
+            host: agentData.llmConfig?.localConfig?.host || 'localhost',
+            port: parseInt(agentData.llmConfig?.localConfig?.port || '8080'),
+            endpoint: agentData.llmConfig?.localConfig?.endpoint || '/api/chat',
+            model_name: agentData.llmConfig?.model || 'llama2',
+            // Add additional endpoints support
+            additional_endpoints: agentData.llmConfig?.localEndpoints?.map(endpoint => ({
+              name: endpoint.name,
+              host: endpoint.host,
+              port: parseInt(endpoint.port),
+              endpoint: endpoint.endpoint,
+              model: endpoint.model,
+              is_active: endpoint.isActive
+            })) || []
+          } : null
         };
       } else {
         // Child agent - use same format as main agent but with child-specific values
+        const isLocalDeployment = agentData.llmConfig?.deployment === 'local';
+        
         agentRequest = {
           name: agentData.name,
           description: agentData.description || 'Child agent',
           model_provider: agentData.llmConfig?.provider || 'openai',
           model_name: agentData.llmConfig?.model || 'gpt-3.5-turbo',
-          api_key: agentData.llmConfig?.apiKey || '',
+          api_key: isLocalDeployment ? '' : (agentData.llmConfig?.apiKey || ''),
           system_prompt: 'You are a helpful child agent.',
           capabilities: agentData.capabilities || [],
           tools_enabled: ['chat', 'analysis'],
-          temperature: agentData.settings?.temperature?.toString() || '0.7',
+          temperature: (agentData.settings?.temperature || 0.7).toString(),
           max_tokens: agentData.settings?.maxTokens || 2000,
           timeout_seconds: 300,
           is_public: false,
           is_system: false,
-          parent_agent_id: agentData.parent_agent_id || 4  // Use default parent if not set
+          parent_agent_id: agentData.parent_agent_id || 4,  // Use default parent if not set
+          // Add local model support
+          is_local_model: isLocalDeployment,
+          local_config: isLocalDeployment ? {
+            host: agentData.llmConfig?.localConfig?.host || 'localhost',
+            port: parseInt(agentData.llmConfig?.localConfig?.port || '8080'),
+            endpoint: agentData.llmConfig?.localConfig?.endpoint || '/api/chat',
+            model_name: agentData.llmConfig?.model || 'llama2',
+            // Add additional endpoints support
+            additional_endpoints: agentData.llmConfig?.localEndpoints?.map(endpoint => ({
+              name: endpoint.name,
+              host: endpoint.host,
+              port: parseInt(endpoint.port),
+              endpoint: endpoint.endpoint,
+              model: endpoint.model,
+              is_active: endpoint.isActive
+            })) || []
+          } : null
         };
       }
 
@@ -566,11 +654,15 @@ const AgentPage: React.FC = () => {
   const loadAgentForEdit = async (agentData: AgentData, isChild: boolean) => {
     try {
       // Use correct API endpoint without /api/v1 prefix
-      const apiEndpoint = isChild ? 'agents/child' : 'agents';
-      const url = configUtils.getApiUrl(`/${apiEndpoint}/${agentData.id}`);
+      const url = configUtils.getApiUrl(`/agents/${agentData.id}`);
       
       console.log('🔧 Loading full agent data for editing:', url);
-      const response = await fetch(url);
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const result = await response.json();
       
       if (result.success) {
@@ -597,7 +689,12 @@ const AgentPage: React.FC = () => {
           // Add child-specific properties
           specialization: fullAgentData.specialization || 'general',
           learningEnabled: fullAgentData.learning_enabled || true,
-          autonomyLevel: fullAgentData.autonomy_level || 'supervised'
+          autonomyLevel: fullAgentData.autonomy_level || 'supervised',
+          // Add Local Configuration properties
+          is_local_model: fullAgentData.is_local_model || false,
+          local_config: fullAgentData.local_config || null,
+          // Add additional endpoints for UI
+          additional_endpoints: fullAgentData.local_config?.additional_endpoints || []
         };
         
         return editingData;

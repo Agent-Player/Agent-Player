@@ -106,7 +106,9 @@ async def create_agent(
             max_tokens=request.max_tokens,
             api_key=request.api_key,
             parent_agent_id=request.parent_agent_id,
-            user_id=request.user_id
+            user_id=request.user_id,
+            is_local_model=request.is_local_model,
+            local_config=request.local_config.dict() if request.local_config else None
         )
         
         return SuccessResponse(
@@ -140,7 +142,9 @@ async def create_child_agent(
             max_tokens=request.max_tokens,
             api_key=request.api_key,
             parent_agent_id=request.parent_agent_id,  # This can be None initially
-            user_id=request.user_id
+            user_id=request.user_id,
+            is_local_model=request.is_local_model,
+            local_config=request.local_config.dict() if request.local_config else None
         )
         
         return SuccessResponse(
@@ -154,12 +158,20 @@ async def create_child_agent(
 async def update_agent(
     agent_id: int, 
     request: AgentUpdateRequest,
-    current_user: Dict = Depends(get_current_user),
+    current_user: Optional[Dict] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update existing agent"""
     try:
-        success = await agent_service.update_agent(db, agent_id, request.dict(exclude_unset=True))
+        # Convert request to dict and handle local_config properly
+        update_data = request.dict(exclude_unset=True)
+        
+        # Convert local_config from Pydantic model to dict if present
+        if 'local_config' in update_data and update_data['local_config'] is not None:
+            if hasattr(update_data['local_config'], 'dict'):
+                update_data['local_config'] = update_data['local_config'].dict()
+        
+        success = await agent_service.update_agent(db, agent_id, update_data)
         if not success:
             raise HTTPException(status_code=404, detail="Agent not found")
         

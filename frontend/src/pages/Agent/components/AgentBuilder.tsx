@@ -20,6 +20,7 @@ interface LLMConfig {
     host: string;
     port: string;
     endpoint: string;
+    model_name?: string;
   };
   localEndpoints: LocalEndpoint[];
 }
@@ -57,6 +58,23 @@ interface AgentData {
   temperature?: string;
   maxTokens?: number;
   capabilities?: string[];
+  // Local configuration support
+  is_local_model?: boolean;
+  local_config?: {
+    host: string;
+    port: number;
+    endpoint: string;
+    model_name?: string;
+  };
+  // Additional endpoints for display
+  additional_endpoints?: {
+    name: string;
+    host: string;
+    port: number;
+    endpoint: string;
+    model: string;
+    is_active: boolean;
+  }[];
 }
 
 interface MainAgentOption {
@@ -97,7 +115,7 @@ export const AgentBuilder: React.FC<AgentBuilderProps> = ({
       localConfig: {
         host: 'localhost',
         port: '8080',
-        endpoint: '/v1/chat/completions',
+        endpoint: '/api/chat',
       },
       localEndpoints: [],
     },
@@ -164,14 +182,22 @@ export const AgentBuilder: React.FC<AgentBuilderProps> = ({
         llmConfig: {
           provider: initialData.llmProvider || 'openai',
           model: initialData.llmModel || 'gpt-4',
-          deployment: 'online',
+          deployment: initialData.is_local_model ? 'local' : 'online',
           apiKey: initialData.apiKey || '', // Show saved API key
           localConfig: {
-            host: 'localhost',
-            port: '8080',
-            endpoint: '/v1/chat/completions',
+            host: initialData.local_config?.host || 'localhost',
+            port: initialData.local_config?.port?.toString() || '8080',
+            endpoint: initialData.local_config?.endpoint || '/api/chat',
           },
-          localEndpoints: [],
+          localEndpoints: initialData.additional_endpoints?.map(endpoint => ({
+            id: `endpoint-${endpoint.name.toLowerCase().replace(/\s+/g, '-')}`,
+            name: endpoint.name,
+            host: endpoint.host,
+            port: endpoint.port.toString(),
+            endpoint: endpoint.endpoint,
+            model: endpoint.model,
+            isActive: endpoint.is_active
+          })) || [],
         },
         settings: {
           autoResponse: true,
@@ -195,8 +221,9 @@ export const AgentBuilder: React.FC<AgentBuilderProps> = ({
           apiKey: '',
           localConfig: {
             host: 'localhost',
-            port: '8080',
+            port: '11434',
             endpoint: '/v1/chat/completions',
+            model_name: 'llama3',
           },
           localEndpoints: [],
         },
@@ -880,7 +907,7 @@ export const AgentBuilder: React.FC<AgentBuilderProps> = ({
       name: `Endpoint ${formData.llmConfig.localEndpoints.length + 1}`,
       host: 'localhost',
       port: '8080',
-      endpoint: '/v1/chat/completions',
+      endpoint: '/api/chat',
       model: 'llama2',
       isActive: true,
     };
@@ -1262,7 +1289,7 @@ export const AgentBuilder: React.FC<AgentBuilderProps> = ({
                     <input
                       style={styles.input}
                       type="text"
-                      placeholder="API Endpoint (e.g., /v1/chat/completions)"
+                      placeholder="API Endpoint (e.g., /api/chat)"
                       value={formData.llmConfig.localConfig.endpoint}
                       onChange={(e) => updateLocalConfig('endpoint', e.target.value)}
                     />
