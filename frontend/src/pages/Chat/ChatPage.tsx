@@ -9,6 +9,7 @@ import { ConversationsSidebar } from './components/ConversationsSidebar';
 import { ChatInterface } from './components/ChatInterface';
 import { ModelSelector } from './components/ModelSelector';
 import { ChatSettings } from './components/ChatSettings';
+import SessionsManager from './components/SessionsManager';
 import { useAuth } from '../../hooks/useAuth';
 import { chatService, agentsService } from '../../services';
 import './ChatPage.css';
@@ -16,7 +17,7 @@ import './ChatPage.css';
 // Import icons
 import {
   Send, Paperclip, Image, Bot, Settings, Plus, Search, Pin, Trash2, Edit3,
-  Menu, X, Copy, ThumbsUp, ThumbsDown, Zap, File, Download, Mic, Volume2,
+  X, Copy, ThumbsUp, ThumbsDown, Zap, File, Download, Mic, Volume2,
   Eye, Moon, Sun, Monitor, Languages, Bell, Save, RotateCcw, Upload,
   Sliders, Globe, Shield, Database, Lock, AlertTriangle, FileText,
   MessageSquare, Archive, MoreVertical, Smile, Calendar, Clock,
@@ -139,7 +140,6 @@ const ChatPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   // UI State
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [messageInput, setMessageInput] = useState('');
@@ -470,34 +470,22 @@ const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className={`chat-page ${settings.theme} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`chat-page ${settings.theme}`}>
       {/* Sidebar */}
       <div className="chat-sidebar">
         <div className="sidebar-header">
-          <button 
-            className="sidebar-toggle"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <Menu size={20} />
+          <button className="new-chat-btn" onClick={createConversation}>
+            <Plus size={20} />
+            <span>New Chat</span>
           </button>
           
-          {!sidebarCollapsed && (
-            <>
-              <button className="new-chat-btn" onClick={createConversation}>
-                <Plus size={20} />
-                <span>New Chat</span>
-              </button>
-              
-              <button 
-                className="settings-btn"
-                onClick={() => setShowSettings(true)}
-                title="Settings"
-              >
-                <Settings size={20} />
-              </button>
-            </>
-          )}
+          <button 
+            className="settings-btn"
+            onClick={() => setShowSettings(true)}
+            title="Settings"
+          >
+            <Settings size={20} />
+          </button>
         </div>
         
         {!sidebarCollapsed && (
@@ -871,6 +859,18 @@ const ChatPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Sessions Manager */}
+      {currentConversation && (
+        <SessionsManager
+          conversationId={currentConversation.id}
+          agentId={currentConversation.agent_id}
+          onSessionSelected={(session) => {
+            console.log('Session selected:', session);
+          }}
+          className="chat-sessions"
+        />
+      )}
       
       {/* Hidden File Input */}
       <input

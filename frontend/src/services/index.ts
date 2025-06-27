@@ -10,6 +10,7 @@ export { default as agentsService } from "./agents";
 export { default as tasksService } from "./tasks";
 export { default as chatService } from "./chat";
 export { default as enhancedChatService } from "./enhancedChat";
+export { default as sessionService } from "./sessions";
 export { default as boardsService } from "./boards";
 export { default as childAgentsService } from "./childAgents";
 export { default as mcpService } from "./mcp";
@@ -48,6 +49,16 @@ export type {
   SendMessageRequest,
   ConversationListResponse,
 } from "./chat";
+
+// Session types
+export type {
+  ChatSession,
+  SessionHistoryEvent,
+  SessionAnalytics,
+  CreateSessionRequest,
+  UpdateSessionRequest,
+  SearchSessionsRequest,
+} from "./sessions";
 
 // Enhanced Chat types
 export type {

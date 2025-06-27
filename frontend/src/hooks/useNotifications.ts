@@ -1,10 +1,9 @@
 import { useState, useCallback } from "react";
 
-export interface NotificationItem {
+export interface Notification {
   id: string;
-  type: "success" | "error" | "warning" | "info";
-  title: string;
   message: string;
+  type: "success" | "error" | "warning" | "info";
   duration?: number;
 }
 
@@ -19,7 +18,7 @@ export interface ConfirmDialogState {
 }
 
 export const useNotifications = () => {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
     isOpen: false,
     title: "",
@@ -28,34 +27,35 @@ export const useNotifications = () => {
 
   const addNotification = useCallback(
     (
-      type: NotificationItem["type"],
-      title: string,
       message: string,
-      duration?: number
+      type: "success" | "error" | "warning" | "info" = "info",
+      duration: number = 3000
     ) => {
-      const id =
-        Date.now().toString() + Math.random().toString(36).substr(2, 9);
-      const newNotification: NotificationItem = {
+      const id = Date.now().toString();
+      const notification: Notification = {
         id,
-        type,
-        title,
         message,
-        duration: duration || 5000,
+        type,
+        duration,
       };
 
-      setNotifications((prev) => [...prev, newNotification]);
-      return id;
+      setNotifications((prev) => [...prev, notification]);
+
+      // Auto-remove notification after duration
+      if (duration > 0) {
+        setTimeout(() => {
+          setNotifications((prev) => prev.filter((n) => n.id !== id));
+        }, duration);
+      }
     },
     []
   );
 
   const removeNotification = useCallback((id: string) => {
-    setNotifications((prev) =>
-      prev.filter((notification) => notification.id !== id)
-    );
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
-  const clearNotifications = useCallback(() => {
+  const clearAllNotifications = useCallback(() => {
     setNotifications([]);
   }, []);
 
@@ -151,7 +151,7 @@ export const useNotifications = () => {
     // Notification functions
     addNotification,
     removeNotification,
-    clearNotifications,
+    clearAllNotifications,
     showSuccess,
     showError,
     showWarning,

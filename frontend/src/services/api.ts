@@ -28,7 +28,7 @@ interface CustomInternalAxiosRequestConfig extends InternalAxiosRequestConfig {
 }
 
 // API Base URL - from central configuration
-const API_BASE_URL = config.api.baseURL;
+export const API_BASE_URL = config.api.baseURL;
 
 // Helper function to check if token is expired
 const isTokenExpired = (token: string): boolean => {
