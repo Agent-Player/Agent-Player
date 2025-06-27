@@ -65,6 +65,16 @@ export interface BoardConfig {
   enableDragAndDrop: boolean;
 }
 
+// Add new service configuration types
+interface ServiceConfig {
+  url?: string;
+  port?: string;
+}
+
+interface ServicesConfig {
+  [key: string]: ServiceConfig;
+}
+
 // Base Configuration
 class BaseConfiguration {
   // Application Info
@@ -263,6 +273,31 @@ class BaseConfiguration {
     },
   };
 
+  // Add services configuration
+  public readonly services: ServicesConfig = {
+    llm: {
+      url: import.meta.env.VITE_LLM_URL,
+      port: import.meta.env.VITE_LLM_PORT || "11434",
+    },
+    api: {
+      url: import.meta.env.VITE_API_URL,
+      port: import.meta.env.VITE_API_PORT || "8000",
+    },
+    frontend: {
+      url: import.meta.env.VITE_FRONTEND_URL,
+      port: import.meta.env.VITE_FRONTEND_PORT || "3000",
+    },
+    database: {
+      url: import.meta.env.VITE_DATABASE_URL,
+      port: import.meta.env.VITE_DATABASE_PORT || "8889",
+    },
+  };
+
+  // Add base URL getter
+  public get baseUrl(): string {
+    return import.meta.env.VITE_BASE_URL || "";
+  }
+
   // Utility Methods
   private getBooleanEnv(key: string, defaultValue: boolean = false): boolean {
     const value = import.meta.env[key];
@@ -429,4 +464,12 @@ export const configUtils = {
     debug: config.app.debug,
     features: config.features,
   }),
+};
+
+// Export the getConfig function that uses the existing config instance
+export const getConfig = () => {
+  return {
+    baseUrl: config.baseUrl,
+    services: config.services,
+  };
 };

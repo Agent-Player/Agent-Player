@@ -32,6 +32,7 @@ from api.tasks.endpoints import router as tasks_router
 from api.licensing.endpoints import router as licensing_router
 from api.training_lab.endpoints import router as training_lab_router
 from api.marketplace.endpoints import router as marketplace_router
+from api.system.endpoints import router as system_router
 
 # Configure logging
 logging.basicConfig(
@@ -104,6 +105,7 @@ app.include_router(tasks_router, prefix="/tasks", tags=["Tasks"])
 app.include_router(licensing_router, prefix="/licensing", tags=["Licensing"])
 app.include_router(training_lab_router, prefix="/training-lab", tags=["Training Lab"])
 app.include_router(marketplace_router, prefix="/marketplace", tags=["Marketplace"])
+app.include_router(system_router, prefix="/api/system", tags=["System"])
 
 # Root endpoint
 @app.get("/")

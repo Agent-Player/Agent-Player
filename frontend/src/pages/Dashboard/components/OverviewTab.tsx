@@ -4,27 +4,24 @@ import type { DashboardStats, DashboardConfig, QuickAction } from '../types';
 interface OverviewTabProps {
   stats: DashboardStats;
   config: DashboardConfig;
+  quickActions?: QuickAction[];
 }
 
-const OverviewTab: React.FC<OverviewTabProps> = ({ stats, config }) => {
+const OverviewTab: React.FC<OverviewTabProps> = ({ stats, config, quickActions = [
+  { icon: '🤖', label: 'Create Agent', color: '#667eea', path: '/agent' },
+  { icon: '💬', label: 'New Chat', color: '#9c27b0', path: '/chat' },
+  { icon: '📋', label: 'View Tasks', color: '#4caf50', path: '/tasks' },
+  { icon: '🏗️', label: 'Build Workflow', color: '#ff9800', path: '/board' },
+  { icon: '📊', label: 'Analytics', color: '#2196f3', path: '/analytics' },
+  { icon: '⚙️', label: 'Settings', color: '#607d8b', path: '/settings' },
+] }) => {
   const statCardStyle = {
-    background: 'rgba(255, 255, 255, 0.9)',
-    backdropFilter: 'blur(10px)',
-    borderRadius: '16px',
-    padding: '24px',
-    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.1)',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
-    transition: 'all 0.3s ease',
+    background: '#fff',
+    borderRadius: '12px',
+    padding: '20px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+    marginBottom: '20px'
   };
-
-  const quickActions: QuickAction[] = [
-    { icon: '🤖', label: 'Create Agent', color: '#667eea', path: '/agent' },
-    { icon: '💬', label: 'New Chat', color: '#9c27b0', path: '/chat' },
-    { icon: '📋', label: 'View Tasks', color: '#4caf50', path: '/tasks' },
-    { icon: '🏗️', label: 'Build Workflow', color: '#ff9800', path: '/board' },
-    { icon: '📊', label: 'Analytics', color: '#2196f3', path: '/analytics' },
-    { icon: '⚙️', label: 'Settings', color: '#607d8b', path: '/settings' },
-  ];
 
   const recentActivities = [
     { time: '2 min ago', action: 'Agent "Sales Assistant" completed task', type: 'success', icon: '✅' },
@@ -72,8 +69,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ stats, config }) => {
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', fontSize: '13px', color: '#6c757d' }}>
-            <span>Main: {stats.agents.mainAgents}</span>
-            <span>Child: {stats.agents.childAgents}</span>
+            <span>Training: {stats.agents.training}</span>
           </div>
         </div>
 
@@ -159,7 +155,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ stats, config }) => {
           </div>
         </div>
 
-        {/* System Performance */}
+        {/* System Performance Summary */}
         <div style={statCardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
             <div style={{

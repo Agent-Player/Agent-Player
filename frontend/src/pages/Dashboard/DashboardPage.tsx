@@ -8,6 +8,7 @@ import {
   AnalyticsTab,
   NetworkViewTab,
   SettingsTab,
+  SystemMonitorTab,
 } from './components';
 import { Toolbar } from '../../components/Layout/Toolbar';
 import type { ActiveTab } from './types';
@@ -144,9 +145,15 @@ const DashboardPage: React.FC = () => {
             marginBottom: '24px',
             flexWrap: 'wrap',
           }}>
-            {['overview', 'analytics', 'network', 'settings'].map((tab) => (
+            {[
+              { id: 'overview', label: '📊 Overview' },
+              { id: 'analytics', label: '📈 Analytics' },
+              { id: 'network', label: '🔗 Network View' },
+              { id: 'system', label: '🖥️ System Monitor' },
+              { id: 'settings', label: '⚙️ Dashboard Settings' }
+            ].map((tab) => (
               <button
-                key={tab}
+                key={tab.id}
                 style={{
                   padding: '12px 24px',
                   border: 'none',
@@ -155,20 +162,17 @@ const DashboardPage: React.FC = () => {
                   fontSize: '14px',
                   fontWeight: '600',
                   transition: 'all 0.2s ease',
-                  background: activeTab === tab
+                  background: activeTab === tab.id
                     ? 'linear-gradient(135deg, #667eea, #764ba2)'
                     : 'white',
-                  color: activeTab === tab ? 'white' : '#495057',
-                  boxShadow: activeTab === tab
+                  color: activeTab === tab.id ? 'white' : '#495057',
+                  boxShadow: activeTab === tab.id
                     ? '0 4px 12px rgba(102, 126, 234, 0.3)'
                     : '0 2px 8px rgba(0, 0, 0, 0.1)',
                 }}
-                onClick={() => setActiveTab(tab as ActiveTab)}
+                onClick={() => setActiveTab(tab.id as ActiveTab)}
               >
-                {tab === 'overview' && '📊 Overview'}
-                {tab === 'analytics' && '📈 Analytics'}
-                {tab === 'network' && '🔗 Network View'}
-                {tab === 'settings' && '⚙️ Dashboard Settings'}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -184,6 +188,10 @@ const DashboardPage: React.FC = () => {
 
           {activeTab === 'network' && (
             <NetworkViewTab />
+          )}
+
+          {activeTab === 'system' && (
+            <SystemMonitorTab />
           )}
 
           {activeTab === 'settings' && (
