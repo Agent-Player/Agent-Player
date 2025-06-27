@@ -3,6 +3,14 @@ DPRO AI Agent - Unified Server
 Single FastAPI application with organized structure
 """
 
+import os
+import sys
+from pathlib import Path
+
+# Add the backend directory to PYTHONPATH
+backend_dir = Path(__file__).resolve().parent
+sys.path.append(str(backend_dir))
+
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -34,19 +42,18 @@ logger = logging.getLogger(__name__)
 
 # Create FastAPI application
 app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.VERSION,
-    description=settings.DESCRIPTION,
-    debug=settings.DEBUG
+    title="Dpro AI Agent API",
+    description="API for Dpro AI Agent platform",
+    version="1.0.0"
 )
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],  # In production, replace with your frontend URL
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Initialize database on startup
@@ -132,8 +139,8 @@ if __name__ == "__main__":
     
     uvicorn.run(
         "main:app",
-        host=settings.HOST,
-        port=settings.PORT,
-        reload=settings.RELOAD,
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
         log_level=settings.LOG_LEVEL.lower()
     ) 
