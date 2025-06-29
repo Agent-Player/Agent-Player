@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from core.security import security
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, insert, func, and_
-from models.database import User, Session as UserSession, ActivityLog
+from models.database import User, UserSession, ActivityLog
 import logging
 
 # Create logger

@@ -12,7 +12,7 @@ from services.auth_service import AuthService
 from services.gemini_service import gemini_service
 from config.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-from models.user import User
+from models.database import User
 
 try:
     from google_auth_oauthlib.flow import Flow
