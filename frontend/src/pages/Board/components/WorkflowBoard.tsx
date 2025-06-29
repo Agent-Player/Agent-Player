@@ -8,23 +8,21 @@ const AUTOSAVE_KEY = "dpro-board-autosave";
 
 export type ConnectionType = 'curved' | 'straight' | 'stepped';
 
-export interface WorkflowBoardHandle {
-  handleUndo: () => void;
-  handleRedo: () => void;
-  handleExport: () => void;
-  handleImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleThemeToggle: () => void;
-  handleZoomIn: () => void;
-  handleZoomOut: () => void;
-  handleResetZoom: () => void;
-  handleFitToScreen: () => void;
-  setConnectionType: (type: ConnectionType) => void;
-  getConnectionType: () => ConnectionType;
-  loadDemoWorkflow: () => void;
-  getQueueDataForParent: () => QueueData | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  addNodeDirectly: (componentData: any) => void;
-}
+  export interface WorkflowBoardHandle {
+    handleUndo: () => void;
+    handleRedo: () => void;
+    handleExport: () => void;
+    handleImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    handleThemeToggle: () => void;
+    handleZoomIn: () => void;
+    handleZoomOut: () => void;
+    handleResetZoom: () => void;
+    handleFitToScreen: () => void;
+    setConnectionType: (type: ConnectionType) => void;
+    getConnectionType: () => ConnectionType;
+    loadDemoWorkflow: () => void;
+    getQueueDataForParent: () => QueueData | null;
+  }
 
 interface LogEntry {
   id: string;
@@ -101,8 +99,7 @@ const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardPro
 
   // Enhanced state management
   const [connectionType, setConnectionTypeState] = useState<ConnectionType>('curved');
-  const [toastMessage, setToastMessage] = useState<string>('');
-  const [showToastMessage, setShowToastMessage] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -116,10 +113,9 @@ const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardPro
   const boardRef = useRef<HTMLDivElement>(null);
 
   // Toast utility
-  const showToast = (message: string) => {
-    setToastMessage(message);
-    setShowToastMessage(true);
-    setTimeout(() => setShowToastMessage(false), 3000);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2000);
   };
 
   // Handle functions exposed via ref
@@ -141,18 +137,18 @@ const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardPro
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
     const reader = new FileReader();
     reader.onload = evt => {
       try {
-        const data = JSON.parse(evt.target?.result as string);
-        setNodes(data.nodes || []);
-        setConnections(data.connections || []);
-        showToast('✅ Workflow imported successfully!');
-        console.log('📁 Workflow imported:', data);
-      } catch (error) {
-        console.error('❌ Import error:', error);
-        showToast('❌ Error importing workflow');
+        const obj = JSON.parse(evt.target?.result as string);
+        if (obj.nodes) setNodes(obj.nodes);
+        if (obj.connections) setConnections(obj.connections);
+        if (typeof obj.zoom === 'number') setZoom(obj.zoom);
+        if (obj.pan) setPan(obj.pan);
+        if (obj.connectionType) setConnectionTypeState(obj.connectionType);
+        showToast('Workflow imported!');
+      } catch {
+        showToast('Invalid file format');
       }
     };
     reader.readAsText(file);
@@ -315,43 +311,6 @@ const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardPro
     getConnectionType,
     loadDemoWorkflow,
     getQueueDataForParent: () => queueData,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    addNodeDirectly: (componentData: any) => {
-      console.log('🎯 addNodeDirectly called with:', componentData);
-      
-      // Create node at center of visible area
-      const rect = boardRef.current?.getBoundingClientRect();
-      if (!rect) {
-        console.log('❌ Board ref not available for direct add');
-        showToast('❌ Board reference error');
-        return;
-      }
-
-      // Calculate center position
-      const centerX = (rect.width / 2 / zoom) - pan.x;
-      const centerY = (rect.height / 2 / zoom) - pan.y;
-
-      const newNode: WorkflowNode = {
-        id: `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        x: centerX - 60,
-        y: centerY - 30,
-        label: componentData.label,
-        type: componentData.type,
-        color: componentData.color,
-        icon: componentData.icon
-      };
-
-      console.log('🆕 Creating new node via direct add:', newNode);
-      
-      setNodes(prev => {
-        const updated = [...prev, newNode];
-        console.log('📊 Nodes array updated via direct add:', updated.length, 'total nodes');
-        return updated;
-      });
-      
-      showToast(`✅ Added ${componentData.label} to center!`);
-      console.log('✅ Node added successfully via direct method!');
-    }
   }), [handleUndo, handleRedo, handleExport, handleImport, handleThemeToggle, handleZoomIn, handleZoomOut, handleResetZoom, handleFitToScreen, setConnectionType, getConnectionType, loadDemoWorkflow, queueData]);
 
   // Auto-save
@@ -431,86 +390,43 @@ const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardPro
     showToast('🎯 Demo workflow loaded! Your changes will be auto-saved');
   }, []);
 
-  // Handle drag and drop from component library - ENHANCED
+  // Handle drag and drop from component library
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-    console.log('🎯 DROP EVENT RECEIVED!', e);
-    console.log('📦 DataTransfer items:', e.dataTransfer.types);
-    
     try {
-      const rawData = e.dataTransfer.getData('text/plain');
-      console.log('📋 Raw data received:', rawData);
-      
-      if (!rawData) {
-        console.log('❌ No data found in drop event');
-        showToast('❌ No component data found');
-        return;
-      }
-
-      const componentData = JSON.parse(rawData);
-      console.log('📦 Component data parsed:', componentData);
-      
+      const componentData = JSON.parse(e.dataTransfer.getData('text/plain'));
       const rect = boardRef.current?.getBoundingClientRect();
-      if (!rect) {
-        console.log('❌ Board ref not available');
-        showToast('❌ Board reference error');
-        return;
-      }
+      if (!rect) return;
 
-      // Calculate drop position with better accuracy
       const x = ((e.clientX - rect.left) / zoom) - pan.x;
       const y = ((e.clientY - rect.top) / zoom) - pan.y;
-      
-      console.log('📍 Drop position calculated:', { 
-        clientX: e.clientX, 
-        clientY: e.clientY, 
-        rectLeft: rect.left, 
-        rectTop: rect.top, 
-        zoom, 
-        pan, 
-        finalX: x, 
-        finalY: y 
-      });
 
       const newNode: WorkflowNode = {
-        id: `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        x: Math.max(50, x - 60),
-        y: Math.max(50, y - 30),
+        id: `node-${Date.now()}`,
+        x: x - 60,
+        y: y - 30,
         label: componentData.label,
         type: componentData.type,
         color: componentData.color,
         icon: componentData.icon
       };
 
-      console.log('🆕 Creating new node:', newNode);
+      setNodes(prev => [...prev, newNode]);
       
-      setNodes(prev => {
-        const updated = [...prev, newNode];
-        console.log('📊 Nodes array updated:', updated.length, 'total nodes');
-        console.log('📊 New nodes list:', updated.map(n => ({ id: n.id, label: n.label, x: n.x, y: n.y })));
-        return updated;
-      });
-      
-      // Success feedback
-      showToast(`✅ Added ${componentData.label} to board!`);
-      console.log('✅ Node added successfully!');
-      
-      // Auto-connect logic
+      // Auto-connect to nearest node if there are existing nodes
       if (nodes.length > 0) {
-        console.log('🔗 Checking for auto-connect with', nodes.length, 'existing nodes');
+        // Find the nearest node within 200px radius
         const nearestNode = nodes.reduce((closest, node) => {
           const distance = Math.sqrt(
             Math.pow(node.x - newNode.x, 2) + Math.pow(node.y - newNode.y, 2)
           );
-          console.log(`📏 Distance to ${node.label}:`, distance);
           return distance < 200 && (!closest || distance < closest.distance)
             ? { node, distance }
             : closest;
         }, null as { node: WorkflowNode; distance: number } | null);
 
         if (nearestNode) {
-          console.log('🎯 Found nearest node for auto-connect:', nearestNode);
+          // Check if connection already exists
           const connectionExists = connections.some(
             conn => 
               (conn.source === nearestNode.node.id && conn.target === newNode.id) ||
@@ -519,52 +435,30 @@ const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardPro
 
           if (!connectionExists) {
             const newConnection: WorkflowConnection = {
-              id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              id: `conn-${Date.now()}`,
               source: nearestNode.node.id,
               target: newNode.id
             };
 
             setConnections(prev => [...prev, newConnection]);
-            showToast(`🔗 Auto-connected to ${nearestNode.node.label}!`);
-            console.log('✅ Auto-connection created:', newConnection);
+            showToast(`✨ ${componentData.label} auto-connected to ${nearestNode.node.label}!`);
           } else {
-            console.log('⚠️ Connection already exists');
+            showToast(`Added ${componentData.label}!`);
           }
         } else {
-          console.log('ℹ️ No nearby nodes for auto-connect');
+          showToast(`Added ${componentData.label}!`);
         }
       } else {
-        console.log('ℹ️ First node added to board');
+        showToast(`Added ${componentData.label}!`);
       }
-      
     } catch (error) {
-      console.error('❌ Drop parsing error:', error);
-      showToast('❌ Error adding component');
+      console.error('Drop error:', error);
     }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
-    
-    // Enhanced visual feedback
-    const boardElement = boardRef.current;
-    if (boardElement) {
-      boardElement.style.background = theme === 'dark' 
-        ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%), rgba(102, 126, 234, 0.1)' 
-        : 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%), rgba(102, 126, 234, 0.1)';
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    const boardElement = boardRef.current;
-    if (boardElement) {
-      boardElement.style.background = theme === 'dark' 
-        ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' 
-        : 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)';
-    }
   };
 
   // Enhanced node movement handlers with better UX
@@ -848,7 +742,7 @@ const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardPro
       cursor: isPanning ? 'grabbing' : 'grab'
     }}>
       {/* Toast notification */}
-      {showToastMessage && (
+      {toast && (
         <div style={{
           position: 'fixed',
           top: 80,
@@ -862,7 +756,7 @@ const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardPro
           fontWeight: '500',
           border: `1px solid ${theme === 'dark' ? '#555' : '#ddd'}`,
         }}>
-          {toastMessage}
+          {toast}
         </div>
       )}
 
@@ -878,13 +772,12 @@ const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardPro
         }}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
         onMouseDown={handlePanStart}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        {/* Grid background - Enhanced Visibility */}
+        {/* Grid background */}
         <svg
           style={{
             position: 'absolute',
@@ -893,28 +786,21 @@ const BaseWorkflowBoard = React.forwardRef<WorkflowBoardHandle, WorkflowBoardPro
             width: '100%',
             height: '100%',
             pointerEvents: 'none',
-            opacity: 0.8,
-            zIndex: 1
+            opacity: 0.3,
           }}
         >
           <defs>
             <pattern
               id="grid"
-              width="25"
-              height="25"
+              width="20"
+              height="20"
               patternUnits="userSpaceOnUse"
             >
               <path
-                d="M 25 0 L 0 0 0 25"
+                d="M 20 0 L 0 0 0 20"
                 fill="none"
-                stroke={theme === 'dark' ? '#555' : '#999'}
-                strokeWidth="1.5"
-              />
-              <circle
-                cx="0"
-                cy="0"
-                r="1"
-                fill={theme === 'dark' ? '#666' : '#aaa'}
+                stroke={theme === 'dark' ? '#444' : '#ddd'}
+                strokeWidth="0.5"
               />
             </pattern>
           </defs>

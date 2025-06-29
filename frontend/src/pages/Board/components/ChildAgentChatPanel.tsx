@@ -16,7 +16,7 @@ interface ChatMessage {
   sender: 'user' | 'agent';
   timestamp: Date;
   type?: 'text' | 'suggestion' | 'command';
-  metadata?: Record<string, unknown>;
+  metadata?: any;
 }
 
 interface ChildAgentChatPanelProps {
@@ -115,28 +115,28 @@ export const ChildAgentChatPanel: React.FC<ChildAgentChatPanelProps> = ({
     }
   ];
 
-  // Keyboard shortcuts (commented out for now - can be used for help features later)
-  // const shortcuts = [
-  //   { key: 'Ctrl + /', action: 'Show commands' },
-  //   { key: 'Ctrl + K', action: 'Clear chat' },
-  //   { key: 'Ctrl + Enter', action: 'Send message' },
-  //   { key: 'Esc', action: 'Close chat' },
-  //   { key: 'Ctrl + M', action: 'Maximize/Minimize' }
-  // ];
+  // Keyboard shortcuts
+  const shortcuts = [
+    { key: 'Ctrl + /', action: 'Show commands' },
+    { key: 'Ctrl + K', action: 'Clear chat' },
+    { key: 'Ctrl + Enter', action: 'Send message' },
+    { key: 'Esc', action: 'Close chat' },
+    { key: 'Ctrl + M', action: 'Maximize/Minimize' }
+  ];
 
   // Initialize welcome message when agent is selected
   useEffect(() => {
     if (selectedAgent && messages.length === 0) {
       const welcomeMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
-        content: `Hello! I'm ${selectedAgent.name}, your ${selectedAgent.type} assistant. 🎯 I'm here to help you with Board ${boardId}. I can help you optimize workflows, add components, debug issues, and provide real-time guidance. What would you like to work on?`,
+        content: `Hello! I'm ${selectedAgent.name}, your ${selectedAgent.type} assistant. I'm here to help you with your workflow board. What would you like to work on?`,
         sender: 'agent',
         timestamp: new Date(),
         type: 'text'
       };
       setMessages([welcomeMessage]);
     }
-  }, [selectedAgent, boardId]);
+  }, [selectedAgent]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -150,6 +150,8 @@ export const ChildAgentChatPanel: React.FC<ChildAgentChatPanelProps> = ({
       
       const chatPanel = chatPanelRef.current;
       if (!chatPanel) return;
+
+      const rect = chatPanel.getBoundingClientRect();
       const newHeight = window.innerHeight - e.clientY;
       
       if (newHeight >= 200 && newHeight <= window.innerHeight * 0.8) {
@@ -223,8 +225,13 @@ export const ChildAgentChatPanel: React.FC<ChildAgentChatPanelProps> = ({
     return `I understand you're asking about "${userInput}". As your ${agent.type} assistant, I can help you implement this in your workflow. Could you provide more details about what you'd like to achieve?`;
   };
 
-  const handleSuggestionClick = (suggestion: { text: string; command: string; description: string; icon: string }) => {
+  const handleSuggestionClick = (suggestion: any) => {
     setInputValue(suggestion.text);
+  };
+
+  const handleCommandClick = (command: string) => {
+    setInputValue(command);
+    handleSendMessage();
   };
 
   const clearChat = () => {
@@ -650,7 +657,7 @@ export const ChildAgentChatPanel: React.FC<ChildAgentChatPanelProps> = ({
                       Clear
                     </button>
                     <button
-                      onClick={() => onAgentSelect(undefined as any)}
+                      onClick={() => onAgentSelect(undefined)}
                       style={{
                         background: 'none',
                         border: 'none',
