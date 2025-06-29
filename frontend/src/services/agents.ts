@@ -16,12 +16,6 @@ const AGENTS_ENDPOINTS = {
   statistics: "/agents/statistics/overview",
 } as const;
 
-// Authentication helper - NEW ADDITION
-function getAuthHeaders() {
-  const token = localStorage.getItem("access_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 // Define agent creation data type
 interface CreateAgentData {
   name: string;
@@ -96,10 +90,7 @@ export const agentsService = {
         "🔗 Loading agents from:",
         `${api.defaults.baseURL}${AGENTS_ENDPOINTS.list}`
       );
-
-      // Ensure authentication headers are included
-      const headers = getAuthHeaders();
-      const response = await api.get(AGENTS_ENDPOINTS.list, { headers });
+      const response = await api.get(AGENTS_ENDPOINTS.list);
 
       console.log("📊 Raw API Response:", response.data);
       const agents = extractData<Agent>(response.data);
@@ -108,10 +99,6 @@ export const agentsService = {
       return agents;
     } catch (error) {
       console.error("❌ Error loading agents:", error);
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
       return [];
     }
   },
@@ -119,25 +106,10 @@ export const agentsService = {
   // Get main agents only
   async getMainAgents(): Promise<Agent[]> {
     try {
-      console.log(
-        "🔗 Loading main agents from:",
-        `${api.defaults.baseURL}${AGENTS_ENDPOINTS.main}`
-      );
-
-      const headers = getAuthHeaders();
-      const response = await api.get(AGENTS_ENDPOINTS.main, { headers });
-
-      console.log("📊 Main agents response:", response.data);
-      const agents = extractData<Agent>(response.data);
-      console.log("✅ Main agents extracted:", agents);
-
-      return agents;
+      const response = await api.get(AGENTS_ENDPOINTS.main);
+      return extractData<Agent>(response.data);
     } catch (error) {
       console.error("❌ Error loading main agents:", error);
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
       return [];
     }
   },
@@ -145,25 +117,10 @@ export const agentsService = {
   // Get child agents only
   async getChildAgents(): Promise<Agent[]> {
     try {
-      console.log(
-        "🔗 Loading child agents from:",
-        `${api.defaults.baseURL}${AGENTS_ENDPOINTS.child}`
-      );
-
-      const headers = getAuthHeaders();
-      const response = await api.get(AGENTS_ENDPOINTS.child, { headers });
-
-      console.log("📊 Child agents response:", response.data);
-      const agents = extractData<Agent>(response.data);
-      console.log("✅ Child agents extracted:", agents);
-
-      return agents;
+      const response = await api.get(AGENTS_ENDPOINTS.child);
+      return extractData<Agent>(response.data);
     } catch (error) {
       console.error("❌ Error loading child agents:", error);
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
       return [];
     }
   },
@@ -174,39 +131,18 @@ export const agentsService = {
   ): Promise<{ success: boolean; agent?: Agent; error?: string }> {
     try {
       console.log("🔵 Creating agent:", agentData);
-
-      // Transform frontend data to backend format
-      const backendData = {
-        name: agentData.name,
-        description: agentData.description,
-        agent_type: agentData.type || "main",
-        model_provider: agentData.llmConfig.provider,
-        model_name: agentData.llmConfig.model,
-        system_prompt: "You are a helpful AI assistant.",
-        temperature: agentData.settings.temperature,
-        max_tokens: agentData.settings.maxTokens,
-        api_key: agentData.llmConfig.apiKey,
-        parent_agent_id: agentData.parent_agent_id || null,
-      };
-
-      const headers = getAuthHeaders();
-      const response = await api.post(AGENTS_ENDPOINTS.create, backendData, {
-        headers,
-      });
+      const response = await api.post(AGENTS_ENDPOINTS.create, agentData);
 
       console.log("📊 Create response:", response.data);
 
       // Handle new response format
       if (response.data && response.data.success !== false) {
-        const agent_id = response.data.data?.agent_id || response.data.data?.id;
-        return {
-          success: true,
-          agent: {
-            id: agent_id,
-            ...backendData,
-            created_at: new Date().toISOString(),
-          } as Agent,
-        };
+        const agent =
+          response.data.data?.agent ||
+          response.data.data ||
+          response.data.agent ||
+          response.data;
+        return { success: true, agent };
       } else {
         return {
           success: false,
@@ -226,12 +162,6 @@ export const agentsService = {
       } else if (typeof error === "string") {
         errorMessage = error;
       }
-
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
-
       return {
         success: false,
         error: errorMessage,
@@ -245,41 +175,18 @@ export const agentsService = {
   ): Promise<{ success: boolean; agent?: Agent; error?: string }> {
     try {
       console.log("🔵 Creating child agent:", agentData);
-
-      // Transform frontend data to backend format
-      const backendData = {
-        name: agentData.name,
-        description: agentData.description,
-        parent_agent_id: agentData.parent_agent_id,
-        model_provider: agentData.llmConfig?.provider || "openai",
-        model_name: agentData.llmConfig?.model || "gpt-3.5-turbo",
-        system_prompt: "You are a specialized AI assistant.",
-        temperature: agentData.settings?.temperature || 0.7,
-        max_tokens: agentData.settings?.maxTokens || 1024,
-        api_key: agentData.llmConfig?.apiKey || "",
-      };
-
-      const headers = getAuthHeaders();
-      const response = await api.post(
-        AGENTS_ENDPOINTS.createChild,
-        backendData,
-        { headers }
-      );
+      const response = await api.post(AGENTS_ENDPOINTS.createChild, agentData);
 
       console.log("📊 Create child response:", response.data);
 
       // Handle new response format
       if (response.data && response.data.success !== false) {
-        const agent_id = response.data.data?.agent_id || response.data.data?.id;
-        return {
-          success: true,
-          agent: {
-            id: agent_id,
-            ...backendData,
-            agent_type: "child",
-            created_at: new Date().toISOString(),
-          } as Agent,
-        };
+        const agent =
+          response.data.data?.agent ||
+          response.data.data ||
+          response.data.agent ||
+          response.data;
+        return { success: true, agent };
       } else {
         return {
           success: false,
@@ -299,12 +206,6 @@ export const agentsService = {
       } else if (typeof error === "string") {
         errorMessage = error;
       }
-
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
-
       return {
         success: false,
         error: errorMessage,
@@ -315,15 +216,10 @@ export const agentsService = {
   // Get single agent
   async getAgent(id: number): Promise<Agent | null> {
     try {
-      const headers = getAuthHeaders();
-      const response = await api.get(AGENTS_ENDPOINTS.get(id), { headers });
+      const response = await api.get(AGENTS_ENDPOINTS.get(id));
       return response.data.data || response.data;
     } catch (error: unknown) {
       console.error("Error getting agent:", error);
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
       return null;
     }
   },
@@ -334,10 +230,7 @@ export const agentsService = {
     agentData: Partial<Agent>
   ): Promise<{ success: boolean; agent?: Agent; error?: string }> {
     try {
-      const headers = getAuthHeaders();
-      const response = await api.put(AGENTS_ENDPOINTS.update(id), agentData, {
-        headers,
-      });
+      const response = await api.put(AGENTS_ENDPOINTS.update(id), agentData);
 
       if (response.data && response.data.success !== false) {
         const agent = response.data.data || response.data;
@@ -361,12 +254,6 @@ export const agentsService = {
       } else if (typeof error === "string") {
         errorMessage = error;
       }
-
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
-
       return {
         success: false,
         error: errorMessage,
@@ -377,9 +264,11 @@ export const agentsService = {
   // Delete agent
   async deleteAgent(id: number): Promise<{ success: boolean; error?: string }> {
     try {
-      const headers = getAuthHeaders();
+      const token = localStorage.getItem("access_token");
       const response = await api.delete(AGENTS_ENDPOINTS.delete(id), {
-        headers,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       if (response.data && response.data.success !== false) {
@@ -403,12 +292,6 @@ export const agentsService = {
       } else if (typeof error === "string") {
         errorMessage = error;
       }
-
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
-
       return {
         success: false,
         error: errorMessage,
@@ -425,11 +308,7 @@ export const agentsService = {
       const requestData = testMessage
         ? { message: testMessage }
         : { message: "Hello! This is a test message." };
-
-      const headers = getAuthHeaders();
-      const response = await api.post(AGENTS_ENDPOINTS.test(id), requestData, {
-        headers,
-      });
+      const response = await api.post(AGENTS_ENDPOINTS.test(id), requestData);
 
       if (response.data && response.data.success !== false) {
         return { success: true, result: response.data.data || response.data };
@@ -452,12 +331,6 @@ export const agentsService = {
       } else if (typeof error === "string") {
         errorMessage = error;
       }
-
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
-
       return {
         success: false,
         error: errorMessage,
@@ -468,17 +341,10 @@ export const agentsService = {
   // Get agent children
   async getAgentChildren(id: number): Promise<Agent[]> {
     try {
-      const headers = getAuthHeaders();
-      const response = await api.get(AGENTS_ENDPOINTS.children(id), {
-        headers,
-      });
+      const response = await api.get(AGENTS_ENDPOINTS.children(id));
       return extractData<Agent>(response.data);
     } catch (error) {
       console.error("Error getting agent children:", error);
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
       return [];
     }
   },
@@ -497,20 +363,9 @@ export const agentsService = {
       const duplicateData = {
         name: `${originalAgent.name} (Copy)`,
         description: originalAgent.description,
-        type: (originalAgent as any).agent_type || "main",
-        llmConfig: {
-          provider: (originalAgent as any).model_provider || "openai",
-          model: (originalAgent as any).model_name || "gpt-4",
-          deployment: "online" as const,
-          apiKey: (originalAgent as any).api_key || "",
-        },
-        settings: {
-          autoResponse: true,
-          learning: true,
-          maxConcurrency: 1,
-          temperature: (originalAgent as any).temperature || 0.7,
-          maxTokens: (originalAgent as any).max_tokens || 2048,
-        },
+        agent_type: (originalAgent as any).agent_type || "main",
+        configuration: (originalAgent as any).configuration,
+        is_active: true,
       };
 
       return await this.createAgent(duplicateData);
@@ -523,12 +378,6 @@ export const agentsService = {
       } else if (typeof error === "string") {
         errorMessage = error;
       }
-
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
-
       return {
         success: false,
         error: errorMessage,
@@ -539,15 +388,10 @@ export const agentsService = {
   // Get agent statistics
   async getAgentStatistics(): Promise<any> {
     try {
-      const headers = getAuthHeaders();
-      const response = await api.get(AGENTS_ENDPOINTS.statistics, { headers });
+      const response = await api.get(AGENTS_ENDPOINTS.statistics);
       return response.data.data || response.data;
     } catch (error: unknown) {
       console.error("Error getting agent statistics:", error);
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
       return {
         total_agents: 0,
         active_agents: 0,
@@ -584,12 +428,6 @@ export const agentsService = {
       return await this.updateAgent(id, { is_active: !agent.is_active });
     } catch (error: any) {
       console.error("Error toggling agent status:", error);
-
-      if ((error as any)?.response?.status === 401) {
-        console.warn("🔒 Authentication error - redirecting to login");
-        window.location.href = "/login";
-      }
-
       return {
         success: false,
         error: error.message || "Failed to toggle agent status",

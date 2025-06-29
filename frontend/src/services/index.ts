@@ -13,29 +13,27 @@ export { default as enhancedChatService } from "./enhancedChat";
 export { default as boardsService } from "./boards";
 export { default as childAgentsService } from "./childAgents";
 export { default as mcpService } from "./mcp";
+export { default as workflowsService } from "./workflows";
 export { default as websocketService } from "./websocket";
 export { licenseService } from "./license";
 export { trainingLabService } from "./trainingLab";
 export { marketplaceService } from "./marketplace";
-export { usersService } from "./users";
+// export { usersService } from "./users"; // TODO: Create users service file
 
 // Export enums as values (not types)
 export { TaskStatus, TaskPriority } from "./tasks";
 export { SpecializedRoles, TaskTypes } from "./childAgents";
-// Workflow types are now integrated into Board system
+export { NodeTypes, TriggerTypes } from "./workflows";
 export { WS_EVENTS } from "./websocket";
 
 // Export types for easy access
 export type { User, LoginRequest, RegisterRequest, AuthResponse } from "./auth";
 export type {
   Agent,
-  AgentConfig,
-  AgentStatus,
-  AgentType,
   CreateAgentRequest,
   UpdateAgentRequest,
   AgentListResponse,
-} from "../types";
+} from "./agents";
 export type {
   Task,
   CreateTaskRequest,
@@ -96,38 +94,29 @@ export type {
 export type {
   MCPRequest,
   MCPResponse,
-  MCPStatus,
-  MCPSessionConfig,
+  MCPServer,
+  MCPTool,
+  MCPSession,
   AICommandRequest,
   AICommandResponse,
 } from "./mcp";
 
-// Training Lab types
+// Workflow types
 export type {
-  TrainingWorkspace,
-  TrainingSession,
-  TrainingTemplate,
-  TrainingAnalytics,
-} from "../types/trainingLab";
+  Workflow,
+  WorkflowNode,
+  WorkflowConnection,
+  WorkflowExecution,
+  WorkflowTemplate,
+  CreateWorkflowRequest,
+  CreateNodeRequest,
+  CreateConnectionRequest,
+  WorkflowAnalytics,
+  NodeType,
+  TriggerType,
+} from "./workflows";
 
-// Marketplace types
-export type {
-  MarketplaceItem,
-  MarketplaceCategory,
-  MarketplaceReview,
-  MarketplaceStats,
-} from "../types/marketplace";
-
-// License types (from existing license types)
-export type {
-  LicenseInfo,
-  LicenseStatus,
-  LicenseFeature,
-} from "../types/license";
-
-// Avatar system removed - keeping only audio waves for voice chat
-
-// Type exports from websocket
+// WebSocket types
 export type {
   WebSocketMessage,
   UserPresence,
@@ -138,96 +127,38 @@ export type {
   WSEventType,
 } from "./websocket";
 
-// Type exports from existing types
+// Training Lab types
 export type {
-  ApiResponse,
-  BoardNode,
-  BoardEdge,
-  UserSettings,
-  LoadingState,
-  PaginatedResponse,
-} from "../types";
-
-// Authentication
-export type {
-  LoginCredentials,
-  RegisterData,
-  AuthResponse,
-  User as AuthUser,
-} from "./auth";
-
-// Users
-export type {
-  User,
-  UserPreferences,
-  UserStats,
-  ProfileUpdateData,
-  UsersResponse,
-} from "./users";
-
-// Agents
-export type {
-  Agent,
-  AgentType,
-  CreateAgentData,
-  UpdateAgentData,
-  AgentResponse,
-} from "./agents";
-
-// Chat
-export type { CreateConversationData, SendMessageData } from "./chat";
-
-// Tasks
-export type {
-  Task,
-  CreateTaskData,
-  UpdateTaskData,
-  TaskComment,
-  TaskTimeLog,
-} from "./tasks";
-
-// Settings
-export type {
-  UserProfile,
-  UserAddress,
-  UserLink,
-  UserFile,
-  SettingsResponse,
-} from "./settings";
-
-// Training Lab
-export type {
-  Workspace,
+  TrainingWorkspace,
   TrainingSession,
-  CreateWorkspaceData,
-} from "./trainingLab";
+  TrainingAnalytics,
+  TrainingTemplate,
+  WorkspaceTestResult,
+  LLMConfig,
+  TrainingWorkflow,
+} from "../types/trainingLab";
 
-// License
-export type { LicenseInfo, LicenseValidation, HardwareInfo } from "./license";
-
-// Marketplace
+// Marketplace types
 export type {
   MarketplaceItem,
   MarketplaceCategory,
-  PurchaseData,
-} from "./marketplace";
+  MarketplaceReview,
+  MarketplacePurchase,
+  MarketplaceSearch,
+  MarketplaceStats,
+  SellerAnalytics,
+} from "../types/marketplace";
 
-// Child Agents
-export type { CreateChildAgentData, ChildAgentResponse } from "./childAgents";
-
-// Boards
+// License types (from existing license types)
 export type {
-  Board,
-  BoardNode,
-  BoardConnection,
-  CreateBoardData,
-} from "./boards";
+  License,
+  LicenseInfo,
+  LicenseActivation,
+  OnlineLicenseRequest,
+  OnlineLicenseResponse,
+  LicenseValidation,
+  LicenseStats,
+  LicenseStatus,
+} from "../types/license";
 
-// WebSocket
-export type { WebSocketService } from "./websocketService";
-
-// MCP
-export type { MCPTool, MCPConnection, MCPMessage } from "./mcp";
-
-// API Base
-export type { apiCall } from "./api";
+// Avatar system removed - keeping only audio waves for voice chat
