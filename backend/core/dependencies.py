@@ -9,7 +9,7 @@ from core.security import security
 from config.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from models.user import User
+from models.database import User
 
 async def get_current_user(
     authorization: Optional[str] = Header(None),
