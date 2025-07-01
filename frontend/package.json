@@ -24,6 +24,7 @@
     "@tauri-apps/api": "^2.5.0",
     "@types/react-beautiful-dnd": "^13.1.8",
     "axios": "^1.10.0",
+    "country-state-city": "^3.2.1",
     "date-fns": "^3.6.0",
     "framer-motion": "^11.0.0",
     "js-yaml": "^4.1.0",
