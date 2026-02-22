@@ -34,7 +34,7 @@ pnpm dev
 # → http://localhost:41521
 ```
 
-**Login:** `owner@localhost` / `admin123`
+**Login:** `admin@example.com` / `AdminPass123!@#`
 
 ---
 
