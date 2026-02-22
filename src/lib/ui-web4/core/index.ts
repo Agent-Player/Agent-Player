@@ -5,6 +5,42 @@
  * Spec format: ```spec fence blocks containing JSON Patch operations.
  */
 
+import { z } from 'zod';
+
+// ─── Schema Helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Re-export Zod as 'schema' for catalog definitions
+ */
+export const schema = z;
+
+/**
+ * Type-safe catalog definition helper.
+ * Used to define component catalogs with Zod validation.
+ */
+export function defineCatalog<T extends CatalogDefinition>(
+  _schema: typeof z,
+  catalog: T
+): T {
+  return catalog;
+}
+
+export interface CatalogDefinition {
+  components: Record<string, ComponentDefinition>;
+  actions?: Record<string, ActionDefinition>;
+}
+
+export interface ComponentDefinition {
+  props: z.ZodType<any>;
+  description?: string;
+  example?: any;
+}
+
+export interface ActionDefinition {
+  params: z.ZodType<any>;
+  description?: string;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface Spec {
