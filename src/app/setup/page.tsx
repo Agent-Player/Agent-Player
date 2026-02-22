@@ -97,12 +97,13 @@ export default function SetupPage() {
 
       updateStepStatus(0, allChecksPass ? 'complete' : 'error');
 
-      if (allChecksPass) {
-        setTimeout(() => {
-          console.log('[Setup] Moving to step 1...');
-          setCurrentStep(1);
-        }, 1500);
-      }
+      // Don't auto-advance - let user click button
+      // if (allChecksPass) {
+      //   setTimeout(() => {
+      //     console.log('[Setup] Moving to step 1...');
+      //     setCurrentStep(1);
+      //   }, 1500);
+      // }
     } catch (error) {
       console.error('[Setup] System check failed:', error);
       updateStepStatus(0, 'error');
@@ -267,6 +268,17 @@ export default function SetupPage() {
                 loading={steps[0].status === 'loading'}
               />
             </div>
+
+            {steps[0].status === 'complete' && (
+              <div className="mt-6">
+                <button
+                  onClick={() => setCurrentStep(1)}
+                  className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Continue to Database Setup →
+                </button>
+              </div>
+            )}
 
             {steps[0].status === 'error' && (
               <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
