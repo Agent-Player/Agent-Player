@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { config } from '@/lib/config';
 import type { AvatarScene, WallLayout } from '@/components/avatar/AvatarViewer';
 import { SCENE_OPTIONS } from '@/components/avatar/AvatarViewer';
-import { Upload, Link, Plus, Trash2, Check, Pencil, Star, User, Download, LayoutGrid, Video } from 'lucide-react';
+import { Upload, Link, Plus, Trash2, Check, Pencil, Star, User, Download, Video } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ interface AvatarSettings {
 }
 
 type UploadStatus = 'idle' | 'uploading' | 'done' | 'error';
-type AddMode = 'none' | 'url' | 'upload' | 'browse';
+type AddMode = 'none' | 'url' | 'upload';
 
 function parseAvatarSlug(id: string): { gender: 'female' | 'male' | 'unknown'; num: string; ver: string } {
   const m = id.match(/^(Female|Male)_(\d+)_V(\d+)$/i);
@@ -558,14 +558,6 @@ export default function AvatarSettingsPage() {
               >
                 <Upload size={14} /> Upload GLB
               </button>
-              <button
-                onClick={() => setAddMode('browse')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  addMode === 'browse' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <LayoutGrid size={14} /> Browse
-              </button>
               <a
                 href="/avatar-creator"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
@@ -643,55 +635,6 @@ export default function AvatarSettingsPage() {
               </div>
             )}
 
-            {/* Browse mode */}
-            {addMode === 'browse' && (
-              <div>
-                {systemAvatars.length === 0 ? (
-                  <p className="text-sm text-gray-500">No system avatars available.</p>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {systemAvatars.map(sys => {
-                      const alreadyAdded = avatars.some(a => a.glbUrl === sys.glbUrl);
-                      const parsed = parseAvatarSlug(sys.id);
-                      const isFemale = parsed.gender === 'female';
-                      const gradientClass = isFemale
-                        ? 'from-purple-900 via-pink-900 to-purple-800'
-                        : 'from-blue-900 via-indigo-900 to-blue-800';
-                      const iconColor = isFemale ? '#c084fc' : '#60a5fa';
-                      const label = parsed.gender !== 'unknown'
-                        ? `${parsed.gender === 'female' ? 'Female' : 'Male'} ${parsed.num}`
-                        : sys.name;
-                      const verLabel = parsed.ver ? `V${parsed.ver}` : '';
-                      return (
-                        <div key={sys.id} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                          <div className={`h-32 bg-gradient-to-br ${gradientClass} flex flex-col items-center justify-center overflow-hidden gap-1`}>
-                            {sys.previewUrl ? (
-                              <img src={sys.previewUrl} alt={sys.name} className="w-full h-full object-cover object-top" />
-                            ) : (
-                              <>
-                                <User size={36} color={iconColor} />
-                                {verLabel && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/30 text-white/60">{verLabel}</span>}
-                              </>
-                            )}
-                          </div>
-                          <div className="p-2">
-                            <p className="text-sm font-medium truncate">{label}</p>
-                            {sys.description && <p className="text-xs text-gray-500 truncate">{sys.description}</p>}
-                            <button
-                              onClick={() => { addFromSystem(sys); if (!alreadyAdded) setAddMode('none'); }}
-                              disabled={alreadyAdded}
-                              className="mt-2 w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-xs rounded-lg font-medium transition-colors"
-                            >
-                              {alreadyAdded ? <><Check size={12} /> Added</> : <><Plus size={12} /> Use This</>}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
 
