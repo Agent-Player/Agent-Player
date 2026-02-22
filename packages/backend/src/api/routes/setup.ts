@@ -187,13 +187,16 @@ export default async function setupRoutes(fastify: FastifyInstance) {
       // Generate user ID
       const userId = Date.now().toString();
 
+      // Create username from email
+      const username = email.split('@')[0];
+
       // Create admin user
       const stmt = db.prepare(`
-        INSERT INTO users (id, name, email, password_hash, is_admin, created_at, updated_at, token_version)
-        VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'), 1)
+        INSERT INTO users (id, email, username, password_hash, full_name, role, created_at, updated_at, token_version)
+        VALUES (?, ?, ?, ?, ?, 'admin', datetime('now'), datetime('now'), 1)
       `);
 
-      stmt.run(userId, name, email, passwordHash);
+      stmt.run(userId, email, username, passwordHash, name);
 
       return reply.send({
         success: true,
