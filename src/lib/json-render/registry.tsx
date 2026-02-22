@@ -1174,7 +1174,7 @@ export const { registry } = defineRegistry(chatCatalog, {
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[rehypeSanitize]}
           disallowedElements={['script', 'style', 'iframe', 'object', 'embed', 'link']}
-          transformLinkUri={sanitizeMarkdownUri}
+          urlTransform={sanitizeMarkdownUri}
         >
           {props.content}
         </ReactMarkdown>
@@ -1498,7 +1498,7 @@ export const { registry } = defineRegistry(chatCatalog, {
                     remarkPlugins={[remarkGfm]}
                     rehypePlugins={[rehypeSanitize]}
                     disallowedElements={['script', 'style', 'iframe', 'object', 'embed', 'link']}
-                    transformLinkUri={sanitizeMarkdownUri}
+                    urlTransform={sanitizeMarkdownUri}
                   >
                     {trimmed}
                   </ReactMarkdown>
