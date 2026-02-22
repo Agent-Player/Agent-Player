@@ -202,8 +202,8 @@ export default function SetupPage() {
         return (
           <div className="space-y-6">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold mb-2">Welcome to Agent Player!</h2>
-              <p className="text-gray-600">Checking system requirements...</p>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Agent Player!</h2>
+              <p className="text-gray-700 text-lg">Checking system requirements...</p>
             </div>
 
             <div className="space-y-4">
@@ -255,8 +255,8 @@ export default function SetupPage() {
         return (
           <div className="space-y-6">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold mb-2">Database Setup</h2>
-              <p className="text-gray-600">Initialize database and run migrations</p>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Database Setup</h2>
+              <p className="text-gray-700 text-lg">Initialize database and run migrations</p>
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
@@ -290,62 +290,62 @@ export default function SetupPage() {
         return (
           <div className="space-y-6">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold mb-2">Create Admin Account</h2>
-              <p className="text-gray-600">Set up your administrator credentials</p>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Admin Account</h2>
+              <p className="text-gray-700 text-lg">Set up your administrator credentials</p>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-900 mb-2">
                   Full Name
                 </label>
                 <input
                   type="text"
                   value={adminForm.name}
                   onChange={(e) => setAdminForm({ ...adminForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400"
                   placeholder="John Doe"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-900 mb-2">
                   Email Address
                 </label>
                 <input
                   type="email"
                   value={adminForm.email}
                   onChange={(e) => setAdminForm({ ...adminForm, email: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400"
                   placeholder="admin@example.com"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-900 mb-2">
                   Password
                 </label>
                 <input
                   type="password"
                   value={adminForm.password}
                   onChange={(e) => setAdminForm({ ...adminForm, password: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400"
                   placeholder="Min. 8 characters"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-900 mb-2">
                   Confirm Password
                 </label>
                 <input
                   type="password"
                   value={adminForm.confirmPassword}
                   onChange={(e) => setAdminForm({ ...adminForm, confirmPassword: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-400"
                   placeholder="Re-enter password"
                   required
                 />
@@ -376,8 +376,8 @@ export default function SetupPage() {
               <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <CheckCircle className="w-12 h-12 text-green-600" />
               </div>
-              <h2 className="text-3xl font-bold mb-2">Setup Complete!</h2>
-              <p className="text-gray-600">Agent Player is ready to use</p>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Setup Complete!</h2>
+              <p className="text-gray-700 text-lg">Agent Player is ready to use</p>
             </div>
 
             <div className="bg-green-50 border border-green-200 rounded-lg p-6">
