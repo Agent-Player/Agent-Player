@@ -9,6 +9,10 @@
       "esbuild",
       "protobufjs",
       "sharp"
+    ],
+    "ignoredBuiltDependencies": [
+      "@whiskeysockets/baileys",
+      "puppeteer"
     ]
   },
   "main": "dist/api/server.js",

@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/auth-context';
 import { DeveloperModeProvider } from '@/contexts/developer-context';
 import { NotificationProvider } from '@/contexts/notification-context';
 import { ThemeProvider } from '@/contexts/theme-context';
+import { SetupGuard } from '@/components/setup-guard';
 import { Toaster } from 'sonner';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -22,16 +23,18 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider>
-          <AuthProvider>
-            <DeveloperModeProvider>
-              <NotificationProvider>
-                {children}
-                <Toaster position="top-right" richColors closeButton />
-              </NotificationProvider>
-            </DeveloperModeProvider>
-          </AuthProvider>
-        </ThemeProvider>
+        <SetupGuard>
+          <ThemeProvider>
+            <AuthProvider>
+              <DeveloperModeProvider>
+                <NotificationProvider>
+                  {children}
+                  <Toaster position="top-right" richColors closeButton />
+                </NotificationProvider>
+              </DeveloperModeProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </SetupGuard>
       </body>
     </html>
   );

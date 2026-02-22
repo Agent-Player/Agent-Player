@@ -77,6 +77,7 @@ import { agentFilesRoutes } from './routes/agent-files.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
 import { registerCalendarRoutes } from './routes/calendar.js';
 import { registerPublicChatRoutes } from './routes/public-chat.js';
+import setupRoutes from './routes/setup.js';
 import { processScheduledNotifications } from '../services/notification-service.js';
 import { startCalendarSyncScheduler } from '../services/calendar-sync.js';
 import { config } from '../config/index.js';
@@ -208,6 +209,7 @@ fastify.get('/', {
 }));
 
 // Register routes
+await fastify.register(setupRoutes); // 🛠️ Setup Wizard (First-Time Installation)
 await fastify.register(authRoutes); // 🔐 Authentication
 await fastify.register(databaseRoutes); // 🗄️ Database Management (Stats, Backups, Vacuum)
 await fastify.register(workflowRoutes); // ⚡ Workflow Builder
