@@ -542,14 +542,12 @@ export default function AvatarSettingsPage() {
           <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
             {/* Mode switcher */}
             <div className="flex gap-2">
-              <button
-                onClick={() => setAddMode('url')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  addMode === 'url' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700'
-                }`}
+              <a
+                href="/avatar-creator"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
               >
-                <Link size={14} /> URL
-              </button>
+                <Star size={14} /> RPM Creator
+              </a>
               <button
                 onClick={() => { setAddMode('upload'); setUploadStatus('idle'); }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -558,12 +556,14 @@ export default function AvatarSettingsPage() {
               >
                 <Upload size={14} /> Upload GLB
               </button>
-              <a
-                href="/avatar-creator"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+              <button
+                onClick={() => setAddMode('url')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  addMode === 'url' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700'
+                }`}
               >
-                <Star size={14} /> RPM Creator
-              </a>
+                <Link size={14} /> URL
+              </button>
             </div>
 
             {/* URL mode */}
