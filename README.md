@@ -34,10 +34,6 @@ pnpm dev
 # → http://localhost:41521
 ```
 
-**Default Login:** `owner@localhost` / `admin123`
-
----
-
 ## Features
 
 - Multi-Agent System with custom tools
