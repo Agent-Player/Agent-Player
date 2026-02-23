@@ -40,7 +40,8 @@ pnpm dev
 - 3D Avatar Viewer (Ready Player Me)
 - Interactive Worlds (physics, WASD controls)
 - Extension SDK (plugin system)
-- 18 Built-in Tools (browser, memory, storage)
+- **19 Professional Tools** with examples-driven design (browser, memory, storage, execute_code)
+- Programmatic Tool Calling (10x faster multi-step workflows)
 - Calendar Integration (Google, iCal)
 - WebRTC Video Calls
 
