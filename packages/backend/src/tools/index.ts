@@ -16,6 +16,7 @@ export * from './desktop/index.js';
 export * from './storage/index.js';
 export * from './cli/index.js';
 export * from './notifications/index.js';
+export * from './credentials/index.js';
 
 // Utility function to create a pre-configured registry
 import { ToolsRegistry } from './registry.js';
@@ -61,6 +62,10 @@ import {
 import {
   createReminderTool,
 } from './notifications/index.js';
+
+import {
+  credentialsSaveTool,
+} from './credentials/index.js';
 
 // Global registry of extension-provided tools (registered at extension startup)
 import type { Tool } from './types.js';
@@ -138,12 +143,15 @@ export function createToolsRegistry(context: ToolExecutionContext): ToolsRegistr
   // Register notification tools
   registry.register(createReminderTool);
 
+  // Register credentials tools
+  registry.register(credentialsSaveTool);
+
   // Register extension-provided tools
   for (const tool of extensionTools) {
     registry.register(tool);
   }
 
-  const coreToolsCount = 19;
+  const coreToolsCount = 20;
   const totalToolsCount = coreToolsCount + extensionTools.length;
 
   console.log(`[Tools] 🔧 Tools registry created with ${totalToolsCount} tools`);
@@ -152,6 +160,7 @@ export function createToolsRegistry(context: ToolExecutionContext): ToolsRegistr
   console.log('  ├── Memory: 4 tools (save, search, reflect, stats)');
   console.log('  ├── Desktop: 1 tool (desktop_control)');
   console.log('  ├── Storage: 3 tools (storage_save, storage_search, storage_delete)');
+  console.log('  ├── Credentials: 1 tool (credentials_save)');
   console.log('  ├── CLI Bridge: 2 tools (gemini_cli, claude_cli)');
   console.log('  ├── Notifications: 1 tool (create_reminder)');
   if (extensionTools.length > 0) {

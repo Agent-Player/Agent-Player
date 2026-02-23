@@ -9,7 +9,8 @@ import {
   MessageCircle, X, ZoomIn, ZoomOut, ChevronRight, ChevronLeft, Users, Settings,
   Sun, Moon, Cloud, CloudRain, Snowflake, CloudLightning, Leaf, Sparkles, Flame, Cpu,
   Camera, CameraOff, Circle, Square, Link, Eye, EyeOff, SlidersHorizontal, Mountain,
-  Video, Home, Bell, Puzzle, Palette, FileText, Image as ImageIcon, Brush, Check
+  Video, Home, Bell, Puzzle, Palette, FileText, Image as ImageIcon, Brush, Check,
+  Search, CheckCircle2, XCircle
 } from 'lucide-react';
 import { config } from '@/lib/config';
 import { useDeveloperMode } from '@/contexts/developer-context';
@@ -27,8 +28,12 @@ const AvatarViewer = dynamic(
 type ConvMode = 'idle' | 'listening' | 'processing' | 'speaking';
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
+  type?: 'text' | 'tool_start' | 'tool_result';
+  tools?: Array<{ name: string; input?: string }>;
+  results?: Array<{ name: string; output?: string; isError?: boolean }>;
+  step?: number;
 }
 
 interface AnimEntry {
@@ -3658,6 +3663,10 @@ function AvatarViewerContent() {
         }
       }
 
+      // Add initial assistant message that will be updated as we stream
+      const assistantMsgIndex = messages.length;
+      setMessages(prev => [...prev, { role: 'assistant', content: '💭 Thinking...', type: 'text' }]);
+
       // Stream directly from /api/chat (raw text chunks)
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -3667,6 +3676,10 @@ function AvatarViewerContent() {
           systemPrompt: buildAvatarSystemPrompt(gender, selectedAgent?.system_prompt) +
             (cameraOn && cameraVision ? '\n\nThe user has shared a camera frame with you. You can see them in the image. Respond naturally as if you can see them.' : ''),
           agentId: selectedAgentId || undefined,
+          chatContext: {
+            hasAvatarViewer: true,
+            isInteractiveMode: true,
+          },
         }),
       });
       if (!res.ok) throw new Error('AI request failed');
@@ -3697,6 +3710,7 @@ function AvatarViewerContent() {
       let currentAnimId: string | null = null;
       let fullDisplayText = '';
       const ttsPromises: Promise<{ animId: string | null; blobUrl: string }>[] = [];
+      let streamedText = ''; // Accumulated text for live display
 
       // Read streaming chunks, parse SSE lines, then detect [ANIM:id] boundaries
       while (true) {
@@ -3713,11 +3727,42 @@ function AvatarViewerContent() {
           if (!trimmed.startsWith('data: ')) continue;
           try {
             const json = JSON.parse(trimmed.slice(6));
+
+            // Handle tool execution events
+            if (json.type === 'tool_start') {
+              setMessages(prev => [...prev, {
+                role: 'tool',
+                content: '',
+                type: 'tool_start',
+                tools: json.tools || [],
+                step: json.step,
+              }]);
+            } else if (json.type === 'tool_result') {
+              setMessages(prev => [...prev, {
+                role: 'tool',
+                content: '',
+                type: 'tool_result',
+                results: json.results || [],
+                step: json.step,
+              }]);
+            }
+
             // New format: {type:'text', content} — Old format: {content, done}
             const chunk = (json.type === 'text' && json.content)
               ? json.content
               : (!json.type && json.content ? json.content : '');
-            if (chunk) textBuffer += chunk;
+            if (chunk) {
+              streamedText += chunk;
+              textBuffer += chunk;
+              // Update the LAST assistant message in real-time (ChatGPT-style streaming)
+              setMessages(prev => {
+                const lastAssistantIdx = prev.length - 1 - [...prev].reverse().findIndex(m => m.role === 'assistant');
+                if (lastAssistantIdx < 0) return prev;
+                return prev.map((msg, idx) =>
+                  idx === lastAssistantIdx ? { ...msg, content: streamedText } : msg
+                );
+              });
+            }
           } catch { /* skip malformed lines */ }
         }
 
@@ -4055,11 +4100,55 @@ function AvatarViewerContent() {
               )}
               {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm leading-relaxed ${
-                    m.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-gray-700 text-gray-100 rounded-bl-sm'
-                  }`}>
-                    {m.content}
-                  </div>
+                  {m.role === 'tool' ? (
+                    // Tool execution message
+                    <div className="w-full px-2 py-1.5 rounded-lg bg-gray-800/50 border border-gray-700/50">
+                      {m.type === 'tool_start' && (
+                        <div className="flex items-start gap-2 text-xs">
+                          <Loader2 className="h-3.5 w-3.5 text-blue-400 animate-spin flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 space-y-1">
+                            <div className="text-gray-300 font-medium">Step {m.step}: Executing {m.tools?.length || 0} tool(s)...</div>
+                            {m.tools?.map((tool, idx) => (
+                              <div key={idx} className="text-gray-500 flex items-center gap-1.5">
+                                <Search className="h-3 w-3 flex-shrink-0" />
+                                <span className="font-mono">{tool.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {m.type === 'tool_result' && (
+                        <div className="flex items-start gap-2 text-xs">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-400 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 space-y-1">
+                            <div className="text-gray-300 font-medium">Step {m.step}: Completed</div>
+                            {m.results?.map((result, idx) => (
+                              <div key={idx} className={`flex items-start gap-1.5 ${result.isError ? 'text-red-400' : 'text-gray-500'}`}>
+                                {result.isError ? (
+                                  <XCircle className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                                ) : (
+                                  <CheckCircle2 className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                                )}
+                                <div className="flex-1">
+                                  <div className="font-mono text-[11px]">{result.name}</div>
+                                  {result.output && (
+                                    <div className="text-[10px] text-gray-600 mt-0.5 line-clamp-2">{result.output}</div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    // Regular user/assistant message
+                    <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm leading-relaxed ${
+                      m.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-gray-700 text-gray-100 rounded-bl-sm'
+                    }`}>
+                      {m.content}
+                    </div>
+                  )}
                 </div>
               ))}
               <div ref={chatBottomRef} />

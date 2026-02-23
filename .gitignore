@@ -32,6 +32,7 @@ packages/backend/.data/
 
 # Security & Credentials (NEVER COMMIT)
 /memory/
+packages/backend/memory/
 .agent/*.json
 !.agent/workflows/
 /local/

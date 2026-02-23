@@ -133,6 +133,12 @@ interface ChatRequest {
   systemPromptAppend?: string; // Extra instructions appended AFTER agent system prompt (does not replace it)
   memoryContext?: string;  // Injected relevant memories for this user
   userId?: string;         // For memory tracking
+  chatContext?: {
+    hasAvatarViewer?: boolean;
+    isInteractiveMode?: boolean;
+    hasDesktopControl?: boolean;
+    sessionType?: 'minimal' | 'standard' | 'full';
+  };
 }
 
 export async function chatRoutes(fastify: FastifyInstance) {
@@ -150,6 +156,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
       systemPromptAppend,
       memoryContext,
       userId,
+      chatContext,
     } = request.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -300,15 +307,43 @@ async function streamChat(
     console.log('[Chat]   Tools:', tools.map((t: any) => t.name).join(', '));
   }
 
-  // Append json-render UI prompt to Ollama system prompt (Claude adds it separately in agentic-chat.ts)
+  // Build tool usage instructions for Ollama (explicit instructions required)
+  const toolInstructions = tools.length > 0 ? `
+
+## CRITICAL: Tool Usage Instructions
+
+You have access to ${tools.length} powerful tools. **YOU MUST USE THEM** when the task requires external data or actions:
+
+Available tools: ${tools.map((t: any) => t.name).join(', ')}
+
+**RULES:**
+1. When user asks for real-time data (weather, stocks, news, web info) → ALWAYS use web_fetch tool first
+2. When user asks to browse a website → use browser tools
+3. When user asks to control the computer → use desktop_control tool
+4. NEVER say "I cannot access" or "I don't have access" - TRY THE TOOL FIRST!
+5. Use tools in parallel when possible for faster results
+6. After getting tool results, present the data using \`\`\`spec blocks for visual display
+
+**Example workflow:**
+User: "What's the weather in Basra?"
+You: [Call web_fetch tool to get weather data]
+You: [Present results with \`\`\`spec blocks showing temperature, conditions, etc.]
+` : '';
+
+  // Append json-render UI prompt + tool instructions to Ollama system prompt
   const finalSystemPrompt = provider !== 'claude'
-    ? [resolvedSmartPrompt, getJsonRenderPrompt()].filter(Boolean).join('\n\n---\n\n')
+    ? [resolvedSmartPrompt, toolInstructions, getJsonRenderPrompt()].filter(Boolean).join('\n\n---\n\n')
     : resolvedSmartPrompt;
+
+  // Update ollamaMessages system prompt to include JSON render instructions (for non-Claude providers)
+  if (provider !== 'claude' && ollamaMessages.length > 0 && ollamaMessages[0].role === 'system') {
+    ollamaMessages[0].content = finalSystemPrompt;
+  }
 
   // Route to the correct provider
   if (provider === 'claude' && apiKey) {
     console.log('[Chat] 🤖 Using Claude API (agent api_key)');
-    return streamChatClaude(reply, apiKey, model, ollamaMessages, finalSystemPrompt, tools, temperature, userId, sessionId);
+    return streamChatClaude(reply, apiKey, model, ollamaMessages, finalSystemPrompt, tools, temperature, userId, sessionId, chatContext);
   }
 
   // Fallback: check global settings for claude
@@ -325,7 +360,8 @@ async function streamChat(
       tools,
       temperature,
       userId,
-      sessionId
+      sessionId,
+      chatContext
     );
   }
 
@@ -585,13 +621,13 @@ async function nonStreamChat(
   const tools = toolsRegistryNS.getToolsForAPI();
   if (provider === 'claude' && apiKey) {
     console.log('[Chat] 🤖 Using Claude API (agent api_key, non-stream)');
-    return streamChatClaude(reply, apiKey, model, ollamaMessages, finalSystemPromptNS, tools, temperature, userId, sessionId);
+    return streamChatClaude(reply, apiKey, model, ollamaMessages, finalSystemPromptNS, tools, temperature, userId, sessionId, chatContext);
   }
   const settingsManagerNS = getSettingsManager();
   const settingsNS = settingsManagerNS.getSettings();
   if ((provider === 'claude' || settingsNS.provider === 'claude') && settingsNS.claude?.apiKey) {
     console.log('[Chat] 🤖 Using Claude API (global settings, non-stream)');
-    return streamChatClaude(reply, settingsNS.claude.apiKey, model || settingsNS.claude.model || 'claude-sonnet-4-5-20250929', ollamaMessages, finalSystemPromptNS, tools, temperature, userId, sessionId);
+    return streamChatClaude(reply, settingsNS.claude.apiKey, model || settingsNS.claude.model || 'claude-sonnet-4-5-20250929', ollamaMessages, finalSystemPromptNS, tools, temperature, userId, sessionId, chatContext);
   }
 
   // Gemini CLI provider (non-stream path)

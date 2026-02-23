@@ -23,7 +23,7 @@ export class MemoryStorage implements IMemoryStorage {
   private db: ReturnType<typeof getDatabase>;
   private embeddingService: ReturnType<typeof getEmbeddingService>;
 
-  constructor(memoryDir = './memory') {
+  constructor(memoryDir = '../../.data/memory') {
     this.memoryDir = memoryDir;
     this.db = getDatabase();
     this.embeddingService = getEmbeddingService();
