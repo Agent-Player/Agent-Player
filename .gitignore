@@ -126,3 +126,4 @@ apps/ios/fastlane/.env
 .worktrees/
 docker-compose.extra.yml
 .tgz
+*.tsbuildinfo
