@@ -15,6 +15,7 @@ import { createToolsRegistry } from '../../tools/index.js';
 import { loadClaudeProjectMemory } from './claude-local.js';
 import { buildAiToolsContext } from './ai-tools.js';
 import { getJsonRenderPrompt } from './json-render-prompt.js';
+import { buildDynamicSystemPrompt, detectChatContext, type ChatContext } from './system-prompts.js';
 
 // ─── OS detection (runs once at module load) ──────────────────────────────────
 
@@ -85,7 +86,8 @@ export async function streamChatClaude(
   tools: any[],
   temperature: number,
   userId: string = 'default',
-  sessionId: string = 'default'
+  sessionId: string = 'default',
+  chatContext?: Partial<ChatContext>
 ): Promise<FastifyReply> {
   console.log('[Chat] 🚀 Starting Claude agentic stream');
   console.log('[Chat]   Model:', model);
@@ -121,74 +123,42 @@ export async function streamChatClaude(
     let consecutiveErrors = 0;
     const MAX_CONSECUTIVE_ERRORS = 4;
 
-    // Load project MEMORY.md from Claude Code's ~/.claude directory (silent if missing)
+    // Load project MEMORY.md and AI tools context
     const [projectMemory, aiToolsContext] = await Promise.all([
       loadClaudeProjectMemory(),
       buildAiToolsContext(),
     ]);
-    const baseSystemPrompt = [
+
+    // Detect chat context (auto-detect or use explicit context from caller)
+    const context = detectChatContext(
+      messages.map(m => ({ role: m.role, content: m.content })),
+      tools,
+      chatContext
+    );
+
+    console.log('[Chat] 🎯 Context detected:', {
+      sessionType: context.sessionType,
+      hasAvatarViewer: context.hasAvatarViewer,
+      isInteractiveMode: context.isInteractiveMode,
+      hasDesktopControl: context.hasDesktopControl,
+    });
+
+    // Build base prompt with project memory
+    const basePrompt = [
       projectMemory ? `# Project Memory\n\n${projectMemory}` : '',
       systemPrompt || '',
-      aiToolsContext,
-      getJsonRenderPrompt(),
     ].filter(Boolean).join('\n\n---\n\n');
 
-    // Inject OS context + persistence instructions into system prompt
-    const agenticSystemPrompt = baseSystemPrompt +
-      '\n\n' + OS_CONTEXT +
-      '\n\n## Conversation Context Rules\n' +
-      '- The conversation history is always available — USE IT to understand short follow-up commands.\n' +
-      '- A short one-word follow-up (in any language) means: REPEAT THE LAST TASK from history.\n' +
-      '  → Look at the previous messages, understand what was being done, and do it again.\n' +
-      '  → Never ask for clarification on a retry request. Just do it.\n' +
-      '- Pronouns and vague references always refer to the most recent topic in the conversation.\n' +
-      '- Always end your final reply with: "Last task: [brief description]"\n' +
-      '\n\n## Agent Execution Rules\n' +
-      '- Always complete the FULL task without stopping early. Keep making tool calls until done.\n' +
-      '- NEVER return a final text reply mid-task — only reply when the entire user request is finished.\n' +
-      '- Before starting a multi-step task, state your plan: "Plan: 1. ... 2. ... 3. ...". Then execute each step.\n' +
-      '- After each interaction (click, type, etc.), take screenshot(screen=N) to verify the result before the next step.\n' +
-      '- If a step fails, try an alternative approach (different coordinates, keyboard shortcut, or method).\n' +
-      '\n## Narration Format (use this structure after each screenshot)\n' +
-      'After every screenshot, write a short status line in this exact format:\n' +
-      '  ✅ [what you just did]  →  Next: [what you will do next]\n' +
-      'Examples:\n' +
-      '  ✅ Word opened on screen 1  →  Next: click the document area\n' +
-      '  ✅ Clicked document area  →  Next: type the requested text\n' +
-      '  ✅ Text typed  →  Next: press Ctrl+S to save\n' +
-      'This keeps the user informed at every step and helps you track progress.\n' +
-      '\n## Desktop Workflow — follow this order exactly\n' +
-      'Step 1: exec → launch the app with PowerShell Start-Process\n' +
-      'Step 2: wait(3) → give the app time to fully open\n' +
-      'Step 3: get_active_window → learn which screen=N the app opened on\n' +
-      'Step 4: show_indicator(screen=N) → READ the result carefully — it tells you the monitor left/top offset\n' +
-      'Step 5: screenshot(screen=N) → SEE the current state of that screen\n' +
-      'Step 6: interact using ABSOLUTE coordinates: x = monitor.left + localX, y = monitor.top + localY\n' +
-      'Step 7: screenshot(screen=N) after each action to verify → then continue next step\n' +
-      'Step 8: hide_indicator() — call this as your LAST tool call, BEFORE writing the final reply\n' +
-      '\n## IMPORTANT — Screenshots\n' +
-      '- ALWAYS use screenshot(screen=N) to see a specific monitor — NEVER call screenshot without screen param.\n' +
-      '- A combined all-screens image is extremely wide and misleading; always target a specific screen.\n' +
-      '- If you do not yet know which screen, call get_active_window first (Step 3 above).\n' +
-      '\n## Coordinate Rules — READ THIS CAREFULLY\n' +
-      '- All mouse coordinates are ABSOLUTE screen pixels.\n' +
-      '- show_indicator result contains: "Monitor offset: left=X, top=Y" — SAVE THESE VALUES.\n' +
-      '- For every click: x = left_offset + pixel_from_screenshot_left, y = top_offset + pixel_from_screenshot_top.\n' +
-      '- Primary screen (left=0, top=0): click x = localX, y = localY (no offset needed).\n' +
-      '- Second screen to the RIGHT (left=1920, top=0): click x = 1920 + localX, y = localY.\n' +
-      '- Second screen to the LEFT (left=-1920, top=0): click x = -1920 + localX, y = localY.\n' +
-      '- NEVER use local coordinates from screenshot without adding the monitor offset first.\n' +
-      '\n## Opening Windows Applications\n' +
-      '- Use exec (PowerShell) — never the Win key (Start menu closes before next tool call).\n' +
-      '- Word:    exec → Start-Process "WINWORD"\n' +
-      '- Excel:   exec → Start-Process "EXCEL"\n' +
-      '- Notepad: exec → Start-Process "notepad"\n' +
-      '- Browser: exec → Start-Process "chrome"  (or "msedge" / "firefox")\n' +
-      '- Other:   exec → Start-Process "appname"  or  Start-Process -FilePath "C:\\\\full\\\\path.exe"\n' +
-      '\n## Desktop Interaction Tips\n' +
-      '- Scroll: scroll(x, y, amount) — amount > 0 = up, amount < 0 = down.\n' +
-      '- Drag:   drag(start_x, start_y, end_x, end_y) — for sliders, window resize, text select.\n' +
-      '- Keyboard shortcuts are often faster than clicking menus (e.g. Ctrl+S to save).\n';
+    // Build dynamic system prompt based on context
+    const agenticSystemPrompt = buildDynamicSystemPrompt(
+      basePrompt,
+      OS_CONTEXT,
+      context,
+      true,  // includeJsonRender
+      tools.length > 0,  // includeAiTools
+      aiToolsContext,
+      getJsonRenderPrompt()
+    );
 
     // Strip image data from older tool_result messages to control token usage.
     // Only the most recent N screenshots are kept; older ones become text placeholders.
