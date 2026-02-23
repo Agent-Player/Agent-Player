@@ -382,7 +382,7 @@ const MOCK_SPEC: Spec = {
         'tab-notes': { type: 'TabContent', props: { value: 'notes' }, children: ['callout-notes'] },
         'callout-today': { type: 'Callout', props: { type: 'info', title: 'Today\'s Focus', content: 'Ship the ui-web4 integration and test all components with real AI output.' }, children: [] },
         'callout-week':  { type: 'Callout', props: { type: 'tip', title: 'Weekly Goal', content: 'Complete the Generative UI system, add 3D support, and test with Gemini CLI + Claude.' }, children: [] },
-        'callout-notes': { type: 'Callout', props: { type: 'important', title: 'Important Note', content: 'Backend restart needed after every chat-claude.ts change. Use restart-backend.ps1 script.' }, children: [] },
+        'callout-notes': { type: 'Callout', props: { type: 'important', title: 'Important Note', content: 'Backend restart needed after every agentic-chat.ts change. Use restart-backend.ps1 script.' }, children: [] },
 
         // ── Charts Grid ──────────────────────────────────────────────────────
         'grid-charts': { type: 'Grid', props: { columns: 3, gap: 'md' }, children: ['card-bar', 'card-line', 'card-pie'] },
@@ -442,7 +442,7 @@ const MOCK_SPEC: Spec = {
             props: {
                 items: [
                     { title: 'How does ui-web4 work?', content: 'AI outputs JSON Patch operations inside a ```spec fence. The frontend parses them with createMixedStreamParser and renders components progressively as the stream arrives.' },
-                    { title: 'Which agents support specs?', content: 'All agents: Claude (via chat-claude.ts), Gemini CLI, and Ollama all receive the spec format instructions in their system prompt.' },
+                    { title: 'Which agents support specs?', content: 'All agents: Claude (via agentic-chat.ts), Gemini CLI, and Ollama all receive the spec format instructions in their system prompt.' },
                     { title: 'Can I add custom components?', content: 'Yes — add to catalog.ts (Zod schema) and registry.tsx (React impl). The renderer picks them up automatically.' },
                 ],
             },
@@ -479,7 +479,7 @@ const MOCK_SPEC: Spec = {
         'heading-alerts-users': { type: 'Heading', props: { text: 'Alerts & User Cards', level: 'h2' }, children: [] },
         'grid-alerts': { type: 'Grid', props: { columns: 2, gap: 'md' }, children: ['alert-info', 'alert-error'] },
         'alert-info':  { type: 'Alert', props: { title: 'New deployment ready', description: 'Version 1.3.1 has been built successfully and is ready to deploy.', variant: 'default' }, children: [] },
-        'alert-error': { type: 'Alert', props: { title: 'Build failed', description: 'TypeScript error in chat-claude.ts line 142. Fix before deploying.', variant: 'destructive' }, children: [] },
+        'alert-error': { type: 'Alert', props: { title: 'Build failed', description: 'TypeScript error in agentic-chat.ts line 142. Fix before deploying.', variant: 'destructive' }, children: [] },
 
         'grid-users': { type: 'Grid', props: { columns: 3, gap: 'md' }, children: ['card-u1', 'card-u2', 'card-u3'] },
         'card-u1': { type: 'Card', props: { title: null, description: null }, children: ['user-1'] },
@@ -769,7 +769,7 @@ const MOCK_SPEC: Spec = {
                 groups: [
                     {
                         heading: 'Recent Files',
-                        items: [{ label: 'chat-claude.ts', shortcut: null }, { label: 'registry.tsx', shortcut: null }, { label: 'catalog.ts', shortcut: null }],
+                        items: [{ label: 'agentic-chat.ts', shortcut: null }, { label: 'registry.tsx', shortcut: null }, { label: 'catalog.ts', shortcut: null }],
                     },
                     {
                         heading: 'Quick Actions',
