@@ -1446,7 +1446,11 @@ function NotifStack({ notifs, onDismiss, onApprove, onUpdate, onAiReply }: {
   onUpdate: (id: string, changes: Partial<Omit<Notif, 'id'>>) => void;
   onAiReply: (notif: Notif) => Promise<string>;
 }) {
-  if (notifs.length === 0) return null;
+  console.log('[NotifStack] Rendering with notifs count:', notifs.length, 'Items:', notifs);
+  if (notifs.length === 0) {
+    console.log('[NotifStack] No notifications to display');
+    return null;
+  }
   return (
     <>
       <style>{`
@@ -3350,8 +3354,15 @@ function AvatarViewerContent() {
 
   const addNotif = useCallback((n: Omit<Notif, 'id'>) => {
     const id = Math.random().toString(36).slice(2);
-    setNotifs(prev => [...prev, { ...n, id }]);
+    console.log('[Avatar] 🔔 addNotif called with:', JSON.stringify(n, null, 2));
+    console.log('[Avatar] 🔔 Generated ID:', id);
+    setNotifs(prev => {
+      const updated = [...prev, { ...n, id }];
+      console.log('[Avatar] 🔔 Updated notifs state. Count:', updated.length, 'Items:', updated);
+      return updated;
+    });
     if (!n.needsApproval) {
+      console.log('[Avatar] ⏱️ Auto-dismiss scheduled for 5.5 seconds');
       setTimeout(() => setNotifs(prev => prev.filter(x => x.id !== id)), 5500);
     }
   }, []);
@@ -3766,28 +3777,108 @@ function AvatarViewerContent() {
           } catch { /* skip malformed lines */ }
         }
 
-        // Strip complete ```spec blocks (UI components — not spoken aloud)
+        // Extract and render complete ```spec blocks (UI components)
         {
+          if (textBuffer.includes('spec')) {
+            console.log('[Avatar] 📦 TextBuffer contains "spec":', textBuffer.substring(0, 200));
+          }
+
           let sStart: number;
-          while ((sStart = textBuffer.indexOf('```spec\n')) !== -1) {
-            const sEnd = textBuffer.indexOf('\n```', sStart + 8);
-            if (sEnd === -1) break;
-            textBuffer = textBuffer.slice(0, sStart) + textBuffer.slice(sEnd + 4);
+          while ((sStart = textBuffer.indexOf('```spec')) !== -1) {
+            console.log('[Avatar] 🎨 Found spec block at position:', sStart);
+            const sEnd = textBuffer.indexOf('```', sStart + 7);
+            console.log('[Avatar] 🎨 End marker at position:', sEnd);
+            if (sEnd === -1 || sEnd === sStart) {
+              console.log('[Avatar] ⏳ Spec block incomplete, waiting...');
+              break;
+            }
+            let jsonStr = textBuffer.slice(sStart + 7, sEnd).trim();
+            if (jsonStr.startsWith('\n')) jsonStr = jsonStr.slice(1);
+            console.log('[Avatar] 📄 Extracted spec JSON:', jsonStr);
+            textBuffer = textBuffer.slice(0, sStart) + textBuffer.slice(sEnd + 3);
+            try {
+              // Try to parse as a single JSON object first
+              let specData: any;
+              try {
+                specData = JSON.parse(jsonStr);
+              } catch {
+                // If that fails, try parsing as JSON Patch operations (multiple lines)
+                console.log('[Avatar] 🔧 Attempting JSON Patch format parsing...');
+                const lines = jsonStr.split('\n').filter(l => l.trim());
+                const spec: any = { root: '', elements: {} };
+
+                for (const line of lines) {
+                  try {
+                    const patch = JSON.parse(line);
+                    if (patch.op === 'add' && patch.path && patch.value !== undefined) {
+                      const pathParts = patch.path.split('/').filter(p => p);
+                      if (pathParts[0] === 'root') {
+                        spec.root = patch.value;
+                      } else if (pathParts[0] === 'elements' && pathParts[1]) {
+                        spec.elements[pathParts[1]] = patch.value;
+                      }
+                    }
+                  } catch (lineErr) {
+                    console.warn('[Avatar] ⚠️ Failed to parse patch line:', line, lineErr);
+                  }
+                }
+
+                if (spec.root && Object.keys(spec.elements).length > 0) {
+                  specData = { spec };
+                  console.log('[Avatar] ✅ Successfully parsed JSON Patch format');
+                } else {
+                  throw new Error('Failed to build spec from patches');
+                }
+              }
+
+              console.log('[Avatar] 🎨 UI Component extracted:', JSON.stringify(specData, null, 2));
+              const id = Math.random().toString(36).slice(2);
+              const title = specData.title || 'AI Generated UI';
+              const duration = specData.duration || 30000; // Default 30 seconds
+              setUiOverlays(prev => {
+                const updated = [...prev, { id, title, spec: specData.spec || specData, duration }];
+                console.log('[Avatar] 🎨 Updated uiOverlays. Count:', updated.length);
+                return updated;
+              });
+            } catch (e) {
+              console.warn('[Avatar] ❌ Failed to parse spec block:', jsonStr, e);
+            }
           }
         }
 
         // Strip and fire any complete ```notify blocks from the text buffer
         {
+          // Debug: Log buffer content if it contains notify
+          if (textBuffer.includes('notify')) {
+            console.log('[Avatar] 📦 TextBuffer contains "notify":', textBuffer.substring(0, 200));
+          }
+
           let nStart: number;
-          while ((nStart = textBuffer.indexOf('```notify\n')) !== -1) {
-            const nEnd = textBuffer.indexOf('\n```', nStart + 10);
-            if (nEnd === -1) break; // block still streaming in
-            const jsonStr = textBuffer.slice(nStart + 10, nEnd).trim();
-            textBuffer = textBuffer.slice(0, nStart) + textBuffer.slice(nEnd + 4);
+          // Try both with and without newline (chunks may split the pattern)
+          while ((nStart = textBuffer.indexOf('```notify')) !== -1) {
+            console.log('[Avatar] 🔍 Found notify block at position:', nStart);
+            // Find the end marker
+            const nEnd = textBuffer.indexOf('```', nStart + 9);
+            console.log('[Avatar] 🔍 End marker at position:', nEnd);
+            if (nEnd === -1 || nEnd === nStart) {
+              console.log('[Avatar] ⏳ Notify block incomplete, waiting...');
+              break; // block still streaming in
+            }
+            // Extract JSON between ```notify and closing ```
+            let jsonStr = textBuffer.slice(nStart + 9, nEnd).trim();
+            // Remove leading newline if present
+            if (jsonStr.startsWith('\n')) jsonStr = jsonStr.slice(1);
+            console.log('[Avatar] 📄 Extracted JSON:', jsonStr);
+            textBuffer = textBuffer.slice(0, nStart) + textBuffer.slice(nEnd + 3);
             try {
               const notifData = JSON.parse(jsonStr);
+              console.log('[Avatar] 🔔 Notification extracted:', JSON.stringify(notifData, null, 2));
+              console.log('[Avatar] 🔔 Calling addNotif with:', notifData);
               addNotif(notifData);
-            } catch { /* ignore malformed */ }
+              console.log('[Avatar] ✅ addNotif called successfully');
+            } catch (e) {
+              console.warn('[Avatar] ❌ Failed to parse notify block:', jsonStr, e);
+            }
           }
         }
 

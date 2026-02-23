@@ -136,9 +136,9 @@ export function createToolsRegistry(context: ToolExecutionContext): ToolsRegistr
   registry.register(storageSearchTool);
   registry.register(storageDeleteTool);
 
-  // Register CLI bridge tools
-  registry.register(geminiCliTool);
-  registry.register(claudeCliTool);
+  // Register CLI bridge tools (DISABLED - not needed when using API directly)
+  // registry.register(geminiCliTool);
+  // registry.register(claudeCliTool);
 
   // Register notification tools
   registry.register(createReminderTool);
@@ -151,7 +151,7 @@ export function createToolsRegistry(context: ToolExecutionContext): ToolsRegistr
     registry.register(tool);
   }
 
-  const coreToolsCount = 20;
+  const coreToolsCount = 18;  // Reduced from 20 (removed CLI tools)
   const totalToolsCount = coreToolsCount + extensionTools.length;
 
   console.log(`[Tools] 🔧 Tools registry created with ${totalToolsCount} tools`);
@@ -161,7 +161,6 @@ export function createToolsRegistry(context: ToolExecutionContext): ToolsRegistr
   console.log('  ├── Desktop: 1 tool (desktop_control)');
   console.log('  ├── Storage: 3 tools (storage_save, storage_search, storage_delete)');
   console.log('  ├── Credentials: 1 tool (credentials_save)');
-  console.log('  ├── CLI Bridge: 2 tools (gemini_cli, claude_cli)');
   console.log('  ├── Notifications: 1 tool (create_reminder)');
   if (extensionTools.length > 0) {
     console.log(`  └── Extensions: ${extensionTools.length} tools (${extensionTools.map(t => t.name).join(', ')})`);

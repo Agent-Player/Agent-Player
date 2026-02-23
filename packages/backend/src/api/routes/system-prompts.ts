@@ -75,12 +75,17 @@ CRITICAL: For ANY task with multiple steps:
 \`\`\`
 
 ### Interactive UI (when interactive mode is active)
-- Use \`\`\`spec blocks to show structured data (progress bars, checklists)
-- Example checklist UI:
+- Use \`\`\`spec blocks to show structured data (cards, charts, progress bars)
+- Format: Single JSON object with root + elements structure
+- Example progress bar:
 \`\`\`spec
-{"op":"add","path":"/root","value":"progress"}
-{"op":"add","path":"/elements/progress","value":{"type":"ProgressBar","props":{"label":"Task Progress","value":60,"showPercent":true},"children":[]}}
+{"root":"r","elements":{"r":{"type":"ProgressBar","props":{"label":"Task Progress","value":60,"showPercent":true},"children":[]}}}
 \`\`\`
+- Example stock portfolio card:
+\`\`\`spec
+{"root":"r","elements":{"r":{"type":"Card","props":{"title":"Portfolio","description":"Current holdings"},"children":["m1","m2","m3"]},"m1":{"type":"Metric","props":{"label":"Apple (AAPL)","value":"$180.00","detail":"Tech sector","trend":"up"},"children":[]},"m2":{"type":"Metric","props":{"label":"Tesla (TSLA)","value":"$250.00","detail":"Automotive","trend":"up"},"children":[]},"m3":{"type":"Metric","props":{"label":"Microsoft (MSFT)","value":"$380.00","detail":"Tech sector","trend":"neutral"},"children":[]}}}
+\`\`\`
+- Available components: Card, Stack, Metric, ProgressBar, Button, Badge, Separator, Text, Heading
 
 REMEMBER: Partial completion = Total failure. Your goal is to FINISH, not START.`;
 

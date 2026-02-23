@@ -163,6 +163,8 @@ export async function chatRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Messages array is required' });
     }
 
+    console.log('[Chat] 📦 Received chatContext:', JSON.stringify(chatContext));
+
     // Resolve agent config: specific agent > primary agent > fallback defaults
     const agentConfig = agentId ? getAgentById(agentId) : getPrimaryAgent();
     const resolvedModel = model || agentConfig?.model || DEFAULT_MODEL;
@@ -211,9 +213,9 @@ export async function chatRoutes(fastify: FastifyInstance) {
 
     try {
       if (stream) {
-        return streamChat(reply, resolvedModel, resolvedProvider, resolvedApiKey, messages, resolvedTemp, resolvedMaxTokens, sessionId, resolvedSystemPrompt, systemPromptAppend, userId);
+        return streamChat(reply, resolvedModel, resolvedProvider, resolvedApiKey, messages, resolvedTemp, resolvedMaxTokens, sessionId, resolvedSystemPrompt, systemPromptAppend, userId, chatContext);
       } else {
-        return nonStreamChat(reply, resolvedModel, resolvedProvider, resolvedApiKey, messages, resolvedTemp, resolvedMaxTokens, sessionId, resolvedSystemPrompt, systemPromptAppend, userId);
+        return nonStreamChat(reply, resolvedModel, resolvedProvider, resolvedApiKey, messages, resolvedTemp, resolvedMaxTokens, sessionId, resolvedSystemPrompt, systemPromptAppend, userId, chatContext);
       }
     } catch (error: any) {
       // SECURITY: Use centralized error handler to prevent info disclosure (H-09)
@@ -234,7 +236,8 @@ async function streamChat(
   sessionId: string = 'default-session',
   customSystemPrompt?: string,
   systemPromptAppend?: string,
-  userId: string = 'default'
+  userId: string = 'default',
+  chatContext?: any
 ) {
   console.log('[Chat] 🚀 Starting stream chat');
   console.log('[Chat]   📦 Model:', model);
@@ -555,7 +558,8 @@ async function nonStreamChat(
   sessionId: string = 'default-session',
   customSystemPrompt?: string,
   systemPromptAppend?: string,
-  userId: string = 'default'
+  userId: string = 'default',
+  chatContext?: any
 ) {
   console.log('[Chat] 🚀 Starting non-stream chat');
   console.log('[Chat]   📦 Model:', model);
