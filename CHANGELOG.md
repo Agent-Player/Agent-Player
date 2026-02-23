@@ -12,6 +12,13 @@ All notable changes to Agent Player.
 
 This is a **complete rewrite** from the ground up.
 
+### Refactoring (Latest)
+- **Agentic Chat Engine Rename**: `chat-claude.ts` → `agentic-chat.ts`
+  - More professional, provider-agnostic naming
+  - Describes functionality (tool loop) not specific LLM provider
+  - Future-proof for multi-provider support (Gemini, GPT, etc.)
+  - Updated all import references and documentation
+
 ### Architecture Overhaul
 - Complete backend rewrite (Fastify 5, TypeScript)
 - Complete frontend rewrite (Next.js 15, React 19, TailwindCSS)
