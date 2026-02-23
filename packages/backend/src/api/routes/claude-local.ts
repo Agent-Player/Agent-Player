@@ -388,7 +388,7 @@ export async function claudeLocalRoutes(fastify: FastifyInstance): Promise<void>
   );
 }
 
-// ─── Exported helper for chat-claude.ts ───────────────────────────────────────
+// ─── Exported helper for agentic-chat.ts ───────────────────────────────────────
 
 /**
  * Load the MEMORY.md for the current working directory from Claude Code's projects.

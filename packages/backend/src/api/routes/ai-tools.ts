@@ -457,7 +457,7 @@ export async function aiToolsRoutes(fastify: FastifyInstance): Promise<void> {
   });
 }
 
-// ─── Exported helper for chat-claude.ts ──────────────────────────────────────
+// ─── Exported helper for agentic-chat.ts ──────────────────────────────────────
 
 /**
  * Build a short summary of detected AI tools for injection into agent context.

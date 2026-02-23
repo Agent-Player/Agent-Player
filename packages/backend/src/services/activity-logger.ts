@@ -2,7 +2,7 @@
  * Activity Logger Service
  *
  * Logs agent tool calls and task lifecycle events to the agent_activity table.
- * Used by chat-claude.ts (agentic loop) and agent-cron.ts (scheduled tasks).
+ * Used by agentic-chat.ts (agentic loop) and agent-cron.ts (scheduled tasks).
  */
 
 import { getDatabase } from '../db/index.js';

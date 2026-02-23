@@ -9,7 +9,7 @@ import { handleError } from '../error-handler.js';
 import { AgentRuntime, type Message, type Skill } from '../../agent/index.js';
 import { getSettingsManager } from '../../settings/index.js';
 import { getDatabase } from '../../db/index.js';
-import { streamChatClaude } from './chat-claude.js';
+import { streamChatClaude } from './agentic-chat.js';
 import { createToolsRegistry } from '../../tools/index.js';
 import { geminiCliTool } from '../../tools/cli/gemini-cli.js';
 import { claudeCliTool } from '../../tools/cli/claude-cli.js';
@@ -300,7 +300,7 @@ async function streamChat(
     console.log('[Chat]   Tools:', tools.map((t: any) => t.name).join(', '));
   }
 
-  // Append json-render UI prompt to Ollama system prompt (Claude adds it separately in chat-claude.ts)
+  // Append json-render UI prompt to Ollama system prompt (Claude adds it separately in agentic-chat.ts)
   const finalSystemPrompt = provider !== 'claude'
     ? [resolvedSmartPrompt, getJsonRenderPrompt()].filter(Boolean).join('\n\n---\n\n')
     : resolvedSmartPrompt;
