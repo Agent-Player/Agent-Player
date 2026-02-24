@@ -38,6 +38,7 @@
     "@google-cloud/speech": "^7.2.1",
     "@google-cloud/text-to-speech": "^6.4.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@octokit/rest": "^22.0.1",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.6.2",

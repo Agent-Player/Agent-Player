@@ -7,6 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { getSkillsRegistry } from '../../skills/registry.js';
 import { getSkillsExecutor } from '../../skills/executor.js';
 import { handleError } from '../error-handler.js';
+import { anthropicSkillsService } from '../../services/anthropic-skills-service.js';
 
 export async function skillsRoutes(fastify: FastifyInstance) {
   const skillsRegistry = getSkillsRegistry();
@@ -266,5 +267,208 @@ export async function skillsRoutes(fastify: FastifyInstance) {
     }
   );
 
-  console.log('[Skills API] ✅ Routes registered');
+  // ========================================
+  // MARKETPLACE ROUTES - Anthropic Skills
+  // ========================================
+
+  // GET /api/skills/marketplace/sources - List skill sources
+  fastify.get('/api/skills/marketplace/sources', async (request, reply) => {
+    try {
+      const { getDatabase } = await import('../../db/index.js');
+      const db = getDatabase();
+
+      const sources = db
+        .prepare(
+          `
+        SELECT * FROM skill_sources
+        WHERE is_enabled = 1
+        ORDER BY priority DESC, name
+      `
+        )
+        .all();
+
+      return { success: true, sources };
+    } catch (error: any) {
+      console.error('[Skills Marketplace] ❌ Sources failed:', error);
+      return handleError(reply, error, 'internal', '[Skills Marketplace] Sources failed');
+    }
+  });
+
+  // GET /api/skills/marketplace/available - Fetch available skills from Anthropic
+  fastify.get('/api/skills/marketplace/available', async (request, reply) => {
+    try {
+      const skills = await anthropicSkillsService.fetchAvailableSkills();
+
+      return { success: true, skills, count: skills.length };
+    } catch (error: any) {
+      console.error('[Skills Marketplace] ❌ Fetch available failed:', error);
+      return handleError(reply, error, 'internal', '[Skills Marketplace] Fetch available failed');
+    }
+  });
+
+  // GET /api/skills/marketplace/installed - List installed marketplace skills
+  fastify.get('/api/skills/marketplace/installed', async (request, reply) => {
+    try {
+      const skills = anthropicSkillsService.getInstalledSkills();
+
+      return { success: true, skills, count: skills.length };
+    } catch (error: any) {
+      console.error('[Skills Marketplace] ❌ List installed failed:', error);
+      return handleError(
+        reply,
+        error,
+        'internal',
+        '[Skills Marketplace] List installed failed'
+      );
+    }
+  });
+
+  // POST /api/skills/marketplace/install - Install skill from Anthropic
+  fastify.post<{ Body: { skillName: string; skillPath: string } }>(
+    '/api/skills/marketplace/install',
+    async (request, reply) => {
+      try {
+        const { skillName, skillPath } = request.body;
+
+        if (!skillName || !skillPath) {
+          return reply.status(400).send({
+            success: false,
+            error: 'skillName and skillPath are required',
+          });
+        }
+
+        const localPath = await anthropicSkillsService.installSkill(skillName, skillPath);
+
+        return {
+          success: true,
+          message: `Skill "${skillName}" installed successfully`,
+          localPath,
+        };
+      } catch (error: any) {
+        console.error('[Skills Marketplace] ❌ Install failed:', error);
+        return handleError(reply, error, 'internal', '[Skills Marketplace] Install failed');
+      }
+    }
+  );
+
+  // DELETE /api/skills/marketplace/:skillId - Uninstall marketplace skill
+  fastify.delete<{ Params: { skillId: string } }>(
+    '/api/skills/marketplace/:skillId',
+    async (request, reply) => {
+      try {
+        const { skillId } = request.params;
+
+        await anthropicSkillsService.uninstallSkill(skillId);
+
+        return {
+          success: true,
+          message: 'Skill uninstalled successfully',
+        };
+      } catch (error: any) {
+        console.error('[Skills Marketplace] ❌ Uninstall failed:', error);
+        return handleError(reply, error, 'internal', '[Skills Marketplace] Uninstall failed');
+      }
+    }
+  );
+
+  // GET /api/skills/marketplace/search - Search marketplace skills
+  fastify.get<{ Querystring: { q: string } }>(
+    '/api/skills/marketplace/search',
+    async (request, reply) => {
+      try {
+        const { q } = request.query;
+
+        if (!q) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Query parameter "q" is required',
+          });
+        }
+
+        const skills = await anthropicSkillsService.searchSkills(q);
+
+        return { success: true, skills, count: skills.length };
+      } catch (error: any) {
+        console.error('[Skills Marketplace] ❌ Search failed:', error);
+        return handleError(reply, error, 'internal', '[Skills Marketplace] Search failed');
+      }
+    }
+  );
+
+  // GET /api/skills/marketplace/stats - Get marketplace statistics
+  fastify.get('/api/skills/marketplace/stats', async (request, reply) => {
+    try {
+      const { getDatabase } = await import('../../db/index.js');
+      const db = getDatabase();
+
+      const stats = {
+        totalInstalled: db
+          .prepare(`SELECT COUNT(*) as count FROM installed_skills`)
+          .get() as { count: number },
+        enabled: db
+          .prepare(`SELECT COUNT(*) as count FROM installed_skills WHERE is_enabled = 1`)
+          .get() as { count: number },
+        byCategory: db
+          .prepare(
+            `
+          SELECT category, COUNT(*) as count
+          FROM installed_skills
+          GROUP BY category
+          ORDER BY count DESC
+        `
+          )
+          .all(),
+        mostUsed: db
+          .prepare(
+            `
+          SELECT skill_name, display_name, usage_count
+          FROM installed_skills
+          ORDER BY usage_count DESC
+          LIMIT 5
+        `
+          )
+          .all(),
+      };
+
+      return { success: true, stats };
+    } catch (error: any) {
+      console.error('[Skills Marketplace] ❌ Stats failed:', error);
+      return handleError(reply, error, 'internal', '[Skills Marketplace] Stats failed');
+    }
+  });
+
+  // PUT /api/skills/marketplace/:skillId/toggle - Enable/disable marketplace skill
+  fastify.put<{ Params: { skillId: string } }>(
+    '/api/skills/marketplace/:skillId/toggle',
+    async (request, reply) => {
+      try {
+        const { skillId } = request.params;
+        const { getDatabase } = await import('../../db/index.js');
+        const db = getDatabase();
+
+        // Toggle is_enabled
+        db.prepare(
+          `
+        UPDATE installed_skills
+        SET is_enabled = CASE WHEN is_enabled = 1 THEN 0 ELSE 1 END
+        WHERE id = ?
+      `
+        ).run(skillId);
+
+        const skill = db
+          .prepare(`SELECT is_enabled FROM installed_skills WHERE id = ?`)
+          .get(skillId) as { is_enabled: number } | undefined;
+
+        return {
+          success: true,
+          enabled: skill?.is_enabled === 1,
+        };
+      } catch (error: any) {
+        console.error('[Skills Marketplace] ❌ Toggle failed:', error);
+        return handleError(reply, error, 'internal', '[Skills Marketplace] Toggle failed');
+      }
+    }
+  );
+
+  console.log('[Skills API] ✅ Routes registered (including Marketplace)');
 }

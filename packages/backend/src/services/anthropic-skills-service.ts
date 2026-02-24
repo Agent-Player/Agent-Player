@@ -1,0 +1,368 @@
+/**
+ * Anthropic Skills Service
+ *
+ * Integrates with Anthropic's official skills repository on GitHub
+ * to browse, search, and install Claude Skills.
+ */
+
+import { Octokit } from '@octokit/rest';
+import { getDatabase } from '../db/index.js';
+import fs from 'fs/promises';
+import path from 'path';
+
+const ANTHROPIC_REPO_OWNER = 'anthropics';
+const ANTHROPIC_REPO_NAME = 'skills';
+const SKILLS_BASE_PATH = 'skills';
+const LOCAL_SKILLS_DIR = '.data/skills';
+
+interface AnthropicSkill {
+  name: string;
+  path: string;
+  category: string;
+  description?: string;
+  sha: string;
+}
+
+interface SkillMetadata {
+  name: string;
+  description: string;
+  author?: string;
+  version?: string;
+  tags?: string[];
+}
+
+export class AnthropicSkillsService {
+  private octokit: Octokit;
+
+  constructor() {
+    // GitHub API client (no auth needed for public repos)
+    this.octokit = new Octokit();
+  }
+
+  /**
+   * Fetch all available skills from Anthropic's GitHub repo
+   */
+  async fetchAvailableSkills(): Promise<AnthropicSkill[]> {
+    try {
+      const skills: AnthropicSkill[] = [];
+
+      // Fetch skills directory structure
+      const { data: contents } = await this.octokit.repos.getContent({
+        owner: ANTHROPIC_REPO_OWNER,
+        repo: ANTHROPIC_REPO_NAME,
+        path: SKILLS_BASE_PATH,
+      });
+
+      if (!Array.isArray(contents)) {
+        throw new Error('Expected directory listing');
+      }
+
+      // Iterate through categories (Creative & Design, Development, etc.)
+      for (const category of contents) {
+        if (category.type === 'dir') {
+          const categorySkills = await this.fetchCategorySkills(category.name);
+          skills.push(...categorySkills);
+        }
+      }
+
+      return skills;
+    } catch (error) {
+      console.error('Error fetching Anthropic skills:', error);
+      throw new Error('Failed to fetch skills from Anthropic repository');
+    }
+  }
+
+  /**
+   * Fetch skills from a specific category
+   */
+  private async fetchCategorySkills(categoryName: string): Promise<AnthropicSkill[]> {
+    const skills: AnthropicSkill[] = [];
+
+    try {
+      const { data: categoryContents } = await this.octokit.repos.getContent({
+        owner: ANTHROPIC_REPO_OWNER,
+        repo: ANTHROPIC_REPO_NAME,
+        path: `${SKILLS_BASE_PATH}/${categoryName}`,
+      });
+
+      if (!Array.isArray(categoryContents)) {
+        return skills;
+      }
+
+      for (const item of categoryContents) {
+        if (item.type === 'dir') {
+          // Each subfolder is a skill
+          skills.push({
+            name: item.name,
+            path: item.path,
+            category: this.normalizeCategoryName(categoryName),
+            sha: item.sha,
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching category ${categoryName}:`, error);
+    }
+
+    return skills;
+  }
+
+  /**
+   * Fetch SKILL.md content for a specific skill
+   */
+  async fetchSkillContent(skillPath: string): Promise<string> {
+    try {
+      const { data } = await this.octokit.repos.getContent({
+        owner: ANTHROPIC_REPO_OWNER,
+        repo: ANTHROPIC_REPO_NAME,
+        path: `${skillPath}/SKILL.md`,
+      });
+
+      if ('content' in data && data.content) {
+        // Decode base64 content
+        return Buffer.from(data.content, 'base64').toString('utf-8');
+      }
+
+      throw new Error('SKILL.md not found or empty');
+    } catch (error) {
+      console.error(`Error fetching skill content for ${skillPath}:`, error);
+      throw new Error('Failed to fetch skill content');
+    }
+  }
+
+  /**
+   * Parse SKILL.md frontmatter and extract metadata
+   */
+  parseSkillMetadata(content: string): SkillMetadata {
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+
+    if (!frontmatterMatch) {
+      return {
+        name: 'unknown',
+        description: 'No description available',
+      };
+    }
+
+    const frontmatter = frontmatterMatch[1];
+    const metadata: any = {};
+
+    // Parse YAML-like frontmatter
+    const lines = frontmatter.split('\n');
+    for (const line of lines) {
+      const match = line.match(/^(\w+):\s*(.+)$/);
+      if (match) {
+        const [, key, value] = match;
+        metadata[key] = value.trim();
+      }
+    }
+
+    return {
+      name: metadata.name || 'unknown',
+      description: metadata.description || 'No description available',
+      author: metadata.author,
+      version: metadata.version,
+      tags: metadata.tags ? metadata.tags.split(',').map((t: string) => t.trim()) : [],
+    };
+  }
+
+  /**
+   * Install a skill locally
+   */
+  async installSkill(skillName: string, skillPath: string): Promise<string> {
+    const db = getDatabase();
+
+    try {
+      // 1. Fetch skill content from GitHub
+      const content = await this.fetchSkillContent(skillPath);
+
+      // 2. Parse metadata
+      const metadata = this.parseSkillMetadata(content);
+
+      // 3. Ensure local skills directory exists
+      await fs.mkdir(LOCAL_SKILLS_DIR, { recursive: true });
+
+      // 4. Save SKILL.md locally
+      const fileName = `${skillName}.md`;
+      const localPath = path.join(LOCAL_SKILLS_DIR, fileName);
+      await fs.writeFile(localPath, content, 'utf-8');
+
+      // 5. Get Anthropic source ID
+      const source = db.prepare(`
+        SELECT id FROM skill_sources WHERE name = 'Anthropic Official'
+      `).get() as { id: string } | undefined;
+
+      if (!source) {
+        throw new Error('Anthropic source not found in database');
+      }
+
+      // 6. Insert into database
+      const category = this.extractCategoryFromPath(skillPath);
+
+      db.prepare(`
+        INSERT INTO installed_skills (
+          source_id, skill_name, display_name, description,
+          category, file_path, metadata, is_enabled
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+        ON CONFLICT(source_id, skill_name)
+        DO UPDATE SET
+          file_path = excluded.file_path,
+          metadata = excluded.metadata,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(
+        source.id,
+        skillName,
+        metadata.name,
+        metadata.description,
+        category,
+        localPath,
+        JSON.stringify(metadata)
+      );
+
+      return localPath;
+    } catch (error) {
+      console.error(`Error installing skill ${skillName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search skills by query
+   */
+  async searchSkills(query: string): Promise<any[]> {
+    const db = getDatabase();
+
+    const skills = db.prepare(`
+      SELECT * FROM installed_skills
+      WHERE skill_name LIKE ?
+         OR display_name LIKE ?
+         OR description LIKE ?
+         OR category LIKE ?
+      ORDER BY usage_count DESC, install_date DESC
+    `).all(
+      `%${query}%`,
+      `%${query}%`,
+      `%${query}%`,
+      `%${query}%`
+    );
+
+    return skills;
+  }
+
+  /**
+   * Get all installed skills
+   */
+  getInstalledSkills(): any[] {
+    const db = getDatabase();
+
+    return db.prepare(`
+      SELECT
+        s.*,
+        src.name as source_name,
+        src.type as source_type
+      FROM installed_skills s
+      JOIN skill_sources src ON s.source_id = src.id
+      WHERE s.is_enabled = 1
+      ORDER BY s.category, s.skill_name
+    `).all();
+  }
+
+  /**
+   * Uninstall a skill
+   */
+  async uninstallSkill(skillId: string): Promise<void> {
+    const db = getDatabase();
+
+    // Get skill info
+    const skill = db.prepare(`
+      SELECT file_path FROM installed_skills WHERE id = ?
+    `).get(skillId) as { file_path: string } | undefined;
+
+    if (!skill) {
+      throw new Error('Skill not found');
+    }
+
+    // Delete local file
+    try {
+      await fs.unlink(skill.file_path);
+    } catch (error) {
+      console.warn(`Failed to delete skill file: ${skill.file_path}`);
+    }
+
+    // Delete from database
+    db.prepare(`DELETE FROM installed_skills WHERE id = ?`).run(skillId);
+  }
+
+  /**
+   * Log skill usage
+   */
+  logSkillUsage(skillId: string, userId?: string, agentId?: string, success: boolean = true): void {
+    const db = getDatabase();
+
+    db.prepare(`
+      INSERT INTO skill_usage_log (skill_id, user_id, agent_id, success)
+      VALUES (?, ?, ?, ?)
+    `).run(skillId, userId || null, agentId || null, success ? 1 : 0);
+
+    // Increment usage count
+    db.prepare(`
+      UPDATE installed_skills
+      SET usage_count = usage_count + 1, last_used = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(skillId);
+  }
+
+  // Helper methods
+
+  private normalizeCategoryName(category: string): string {
+    return category.toLowerCase()
+      .replace(/[&\s]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  private extractCategoryFromPath(skillPath: string): string {
+    const parts = skillPath.split('/');
+    return parts[1] || 'general';
+  }
+
+  /**
+   * Get all enabled skills' content for chat system prompt
+   */
+  async getEnabledSkillsContent(): Promise<string> {
+    const db = getDatabase();
+
+    const enabledSkills = db.prepare(`
+      SELECT skill_name, display_name, file_path, description
+      FROM installed_skills
+      WHERE is_enabled = 1
+      ORDER BY category, skill_name
+    `).all() as Array<{
+      skill_name: string;
+      display_name: string;
+      file_path: string;
+      description: string;
+    }>;
+
+    if (enabledSkills.length === 0) {
+      return '';
+    }
+
+    const skillsContent: string[] = [];
+
+    for (const skill of enabledSkills) {
+      try {
+        const content = await fs.readFile(skill.file_path, 'utf-8');
+        skillsContent.push(`\n# Skill: ${skill.display_name || skill.skill_name}\n${content}\n`);
+      } catch (error) {
+        console.warn(`Failed to read skill file: ${skill.file_path}`);
+      }
+    }
+
+    if (skillsContent.length === 0) {
+      return '';
+    }
+
+    return `\n\n## Available Skills\n\nYou have access to the following specialized skills. Use them when appropriate:\n${skillsContent.join('\n---\n')}`;
+  }
+}
+
+export const anthropicSkillsService = new AnthropicSkillsService();

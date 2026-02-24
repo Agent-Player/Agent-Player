@@ -68,6 +68,10 @@ import {
   credentialsSaveTool,
 } from './credentials/index.js';
 
+import {
+  skillInstallTool,
+} from './skill-install.js';
+
 // Global registry of extension-provided tools (registered at extension startup)
 import type { Tool } from './types.js';
 
@@ -147,6 +151,9 @@ export function createToolsRegistry(context: ToolExecutionContext): ToolsRegistr
 
   // Register credentials tools
   registry.register(credentialsSaveTool);
+
+  // Register skill install tool
+  registry.register(skillInstallTool);
 
   // Register extension-provided tools
   for (const tool of extensionTools) {

@@ -1,0 +1,180 @@
+/**
+ * Skill Install Tool
+ *
+ * Allows AI agents to search for and install Claude Skills from Anthropic
+ */
+
+import { anthropicSkillsService } from '../services/anthropic-skills-service.js';
+
+export const skillInstallTool = {
+  name: 'skill_install',
+  description: `Search for and install Claude Skills from Anthropic's official repository.
+
+Use this tool when the user asks to:
+- Install a specific skill (e.g., "install pdf skill")
+- Search for available skills (e.g., "what skills are available for Excel?")
+- Get skills for a specific task (e.g., "get me a skill for web testing")
+
+The tool will search Anthropic's repository, find matching skills, and install them automatically.`,
+
+  input_schema: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['search', 'install', 'list_installed'],
+        description: `Action to perform:
+- "search": Search for skills matching a query
+- "install": Install a specific skill by name
+- "list_installed": List all currently installed skills`,
+      },
+      query: {
+        type: 'string',
+        description:
+          'Search query or skill name (required for "search" and "install" actions)',
+      },
+      skillPath: {
+        type: 'string',
+        description:
+          'GitHub path to the skill (required for "install" action, e.g., "skills/document-skills/pdf")',
+      },
+    },
+    required: ['action'],
+  },
+
+  /**
+   * Execute the skill install tool
+   */
+  async execute(input: {
+    action: string;
+    query?: string;
+    skillPath?: string;
+  }): Promise<string> {
+    try {
+      const { action, query, skillPath } = input;
+
+      // 1. SEARCH for skills
+      if (action === 'search') {
+        if (!query) {
+          return JSON.stringify({
+            success: false,
+            error: 'Query parameter is required for search action',
+          });
+        }
+
+        // Search in installed skills first
+        const installedMatches = await anthropicSkillsService.searchSkills(query);
+
+        if (installedMatches.length > 0) {
+          return JSON.stringify({
+            success: true,
+            action: 'search',
+            found: 'installed',
+            skills: installedMatches.map((s: any) => ({
+              id: s.id,
+              name: s.skill_name,
+              displayName: s.display_name,
+              description: s.description,
+              category: s.category,
+              alreadyInstalled: true,
+            })),
+            message: `Found ${installedMatches.length} installed skill(s) matching "${query}"`,
+          });
+        }
+
+        // Search in Anthropic repository
+        const availableSkills = await anthropicSkillsService.fetchAvailableSkills();
+        const matches = availableSkills.filter(
+          (skill) =>
+            skill.name.toLowerCase().includes(query.toLowerCase()) ||
+            skill.category.toLowerCase().includes(query.toLowerCase())
+        );
+
+        if (matches.length === 0) {
+          return JSON.stringify({
+            success: false,
+            action: 'search',
+            message: `No skills found matching "${query}". Try broader search terms.`,
+          });
+        }
+
+        return JSON.stringify({
+          success: true,
+          action: 'search',
+          found: 'available',
+          skills: matches.slice(0, 10).map((s) => ({
+            name: s.name,
+            category: s.category,
+            path: s.path,
+            alreadyInstalled: false,
+          })),
+          message: `Found ${matches.length} available skill(s) matching "${query}". Showing top 10.`,
+          hint: `To install, use: skill_install with action="install", query="<skill-name>", skillPath="<path>"`,
+        });
+      }
+
+      // 2. INSTALL a skill
+      if (action === 'install') {
+        if (!query || !skillPath) {
+          return JSON.stringify({
+            success: false,
+            error: 'Both query (skill name) and skillPath are required for install action',
+          });
+        }
+
+        const localPath = await anthropicSkillsService.installSkill(query, skillPath);
+
+        return JSON.stringify({
+          success: true,
+          action: 'install',
+          skillName: query,
+          localPath,
+          message: `✅ Skill "${query}" installed successfully! It's now available for use.`,
+        });
+      }
+
+      // 3. LIST installed skills
+      if (action === 'list_installed') {
+        const installed = anthropicSkillsService.getInstalledSkills();
+
+        if (installed.length === 0) {
+          return JSON.stringify({
+            success: true,
+            action: 'list_installed',
+            skills: [],
+            message: 'No skills installed yet. Use action="search" to find skills to install.',
+          });
+        }
+
+        return JSON.stringify({
+          success: true,
+          action: 'list_installed',
+          skills: installed.map((s: any) => ({
+            id: s.id,
+            name: s.skill_name,
+            displayName: s.display_name,
+            description: s.description,
+            category: s.category,
+            enabled: s.is_enabled === 1,
+            usageCount: s.usage_count,
+            source: s.source_name,
+          })),
+          total: installed.length,
+          message: `You have ${installed.length} skill(s) installed.`,
+        });
+      }
+
+      return JSON.stringify({
+        success: false,
+        error: `Unknown action: ${action}. Valid actions: search, install, list_installed`,
+      });
+    } catch (error: any) {
+      console.error('[skill_install tool] Error:', error);
+
+      return JSON.stringify({
+        success: false,
+        error: error.message || 'Failed to execute skill_install tool',
+      });
+    }
+  },
+};
