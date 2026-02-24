@@ -3920,8 +3920,14 @@ function AvatarViewerContent() {
       }
       fullDisplayText = fullDisplayText.trim();
 
-      // Update chat display (clean text without anim markers)
-      setMessages((prev) => [...prev, { role: 'assistant', content: cleanTextForTTS(fullDisplayText) }]);
+      // Update the last assistant message with clean text (remove ANIM tags)
+      setMessages((prev) => {
+        const lastAssistantIdx = prev.length - 1 - [...prev].reverse().findIndex(m => m.role === 'assistant');
+        if (lastAssistantIdx < 0) return [...prev, { role: 'assistant', content: cleanTextForTTS(fullDisplayText) }];
+        return prev.map((msg, idx) =>
+          idx === lastAssistantIdx ? { ...msg, content: cleanTextForTTS(fullDisplayText) } : msg
+        );
+      });
 
       if (ttsPromises.length === 0) {
         setMode(vadEnabled ? 'listening' : 'idle');

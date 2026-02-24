@@ -21,7 +21,7 @@ import {
     CheckCircle2,
     XCircle,
 } from 'lucide-react';
-import React, { useRef, useEffect, useState, use, Suspense } from 'react';
+import React, { useRef, useEffect, useState, use, Suspense, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { cn } from '@/lib/utils';
@@ -38,6 +38,45 @@ import { SpecRenderer } from '@/lib/json-render/renderer';
  */
 function removeAnimationTags(text: string): string {
     return text.replace(/\[ANIM:[^\]]+\]\s*/g, '');
+}
+
+/**
+ * Deduplicate consecutive assistant messages with similar content
+ * Removes duplicate messages where one has [ANIM:...] tags and another doesn't
+ */
+function deduplicateMessages(messages: Message[]): Message[] {
+    const result: Message[] = [];
+
+    for (let i = 0; i < messages.length; i++) {
+        const current = messages[i];
+        const next = messages[i + 1];
+
+        // If this is an assistant message and next is also assistant
+        if (current.role === 'assistant' && next?.role === 'assistant') {
+            const currentClean = removeAnimationTags(current.content).trim();
+            const nextClean = removeAnimationTags(next.content).trim();
+
+            // If they're the same after removing tags, skip the first one (with tags)
+            // Keep the second one (clean) or whichever is longer
+            if (currentClean === nextClean) {
+                continue; // Skip current, let next be added
+            }
+
+            // If current has ANIM tags and next is 90%+ similar, skip current
+            if (current.content.includes('[ANIM:') && !next.content.includes('[ANIM:')) {
+                const similarity = currentClean.length > 0
+                    ? (nextClean.length / currentClean.length)
+                    : 0;
+                if (similarity > 0.9 && similarity < 1.1) {
+                    continue; // Skip current (with tags), next is close enough
+                }
+            }
+        }
+
+        result.push(current);
+    }
+
+    return result;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -180,6 +219,9 @@ function ChatPageInner({ params }: { params: Promise<{ sessionId: string }> }) {
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+
+    // Deduplicate messages to avoid showing duplicates (one with ANIM tags, one without)
+    const displayMessages = useMemo(() => deduplicateMessages(messages), [messages]);
 
     // Fetch agents on mount
     useEffect(() => {
@@ -475,7 +517,7 @@ function ChatPageInner({ params }: { params: Promise<{ sessionId: string }> }) {
                     <ScrollArea className="h-full">
                         <div className="max-w-4xl mx-auto py-8 px-6 flex flex-col gap-6">
                             {/* Empty State */}
-                            {messages.length === 0 && (
+                            {displayMessages.length === 0 && (
                                 <div className="flex flex-1 flex-col items-center justify-center text-center space-y-8 min-h-[500px]">
                                     <div className="bg-gradient-to-tr from-primary/20 to-purple-500/20 p-6 rounded-full ring-1 ring-border shadow-lg">
                                         <Bot className="h-16 w-16 text-primary" />
@@ -511,7 +553,7 @@ function ChatPageInner({ params }: { params: Promise<{ sessionId: string }> }) {
                             )}
 
                             {/* Messages */}
-                            {messages.map((m, idx) => (
+                            {displayMessages.map((m, idx) => (
                                 <div
                                     key={m.id}
                                     className={cn(
@@ -541,7 +583,7 @@ function ChatPageInner({ params }: { params: Promise<{ sessionId: string }> }) {
                                                 ? "rounded-3xl rounded-tr-md bg-primary text-primary-foreground"
                                                 : "rounded-3xl rounded-tl-md bg-card border-2 text-card-foreground"
                                         )}>
-                                            <MessageContent message={m} isStreaming={isLoading && idx === messages.length - 1} />
+                                            <MessageContent message={m} isStreaming={isLoading && idx === displayMessages.length - 1} />
                                         </div>
 
                                         {/* Voice Player for assistant messages */}
@@ -558,7 +600,7 @@ function ChatPageInner({ params }: { params: Promise<{ sessionId: string }> }) {
                             ))}
 
                             {/* Loading Indicator */}
-                            {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
+                            {isLoading && displayMessages[displayMessages.length - 1]?.role !== 'assistant' && (
                                 <div className="flex w-full gap-4">
                                     <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20 border-2 border-border flex items-center justify-center">
                                         <Bot className="w-5 h-5 animate-pulse" />
