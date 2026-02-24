@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { ArrowLeft, MessageCircle } from 'lucide-react';
 import { config } from '@/lib/config';
+import { useAuth } from '@/contexts/auth-context';
 import { SupportChatBlock } from './SupportChatBlock';
 
 // AvatarViewer — SSR off (Three.js)
@@ -94,6 +95,7 @@ export interface AgentSupportPortalProps {
 }
 
 export function AgentSupportPortal({ height = 560, bgColor, title = 'Choose your assistant' }: AgentSupportPortalProps) {
+  const { user } = useAuth();
   const [agents, setAgents]               = useState<AgentInfo[]>([]);
   const [avatarUrl, setAvatarUrl]         = useState<string | null>(null);
   const [loading, setLoading]             = useState(true);
@@ -104,25 +106,44 @@ export function AgentSupportPortal({ height = 560, bgColor, title = 'Choose your
 
   // Fetch agents + avatar URL in parallel
   useEffect(() => {
+    if (!user?.id) {
+      console.log('[AgentSupportPortal] No user ID yet, waiting...');
+      setLoading(false);
+      return;
+    }
+
+    console.log('[AgentSupportPortal] Fetching agents and avatar for user:', user.id);
+
     Promise.all([
-      fetch(`${config.backendUrl}/api/agents-config`).then(r => r.json()),
-      fetch(`${config.backendUrl}/api/avatar/settings?userId=1`).then(r => r.json()),
+      fetch(`${config.backendUrl}/api/agents`).then(r => r.json()),
+      fetch(`${config.backendUrl}/api/avatars?userId=${user.id}&isActive=true`).then(r => r.json()),
     ])
       .then(([agentsData, avatarData]) => {
+        console.log('[AgentSupportPortal] Agents data:', agentsData);
+        console.log('[AgentSupportPortal] Avatar data:', avatarData);
+
         const list: AgentInfo[] = Array.isArray(agentsData) ? agentsData : (agentsData.agents ?? []);
         setAgents(list);
-        const url = avatarData?.settings?.rpmAvatarUrl ?? null;
-        if (url) {
-          // Try to get cached local GLB
-          fetch(`/api/avatar-model?url=${encodeURIComponent(url)}`)
-            .then(r => r.json())
-            .then(d => setAvatarUrl(d.localUrl ?? url))
-            .catch(() => setAvatarUrl(url));
+        console.log('[AgentSupportPortal] Loaded agents:', list.length);
+
+        // Get active avatar from user_avatars table
+        const avatars = avatarData?.avatars || [];
+        const activeAvatar = avatars.find((a: any) => a.isActive);
+        if (activeAvatar?.localGlbPath) {
+          console.log('[AgentSupportPortal] Using avatar:', activeAvatar.localGlbPath);
+          setAvatarUrl(activeAvatar.localGlbPath);
+        } else {
+          console.log('[AgentSupportPortal] No active avatar found');
         }
       })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+      .catch((err) => {
+        console.error('[AgentSupportPortal] Fetch failed:', err);
+      })
+      .finally(() => {
+        console.log('[AgentSupportPortal] Loading complete');
+        setLoading(false);
+      });
+  }, [user?.id]);
 
   // ── Chat view ────────────────────────────────────────────────────────────────
   if (selectedAgent) {

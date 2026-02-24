@@ -104,6 +104,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import dynamic from 'next/dynamic';
 import { config } from '@/lib/config';
+import { useAuth } from '@/contexts/auth-context';
 import { chatCatalog } from './catalog';
 
 const SupportChatBlockDynamic = dynamic(
@@ -1182,15 +1183,18 @@ export const { registry } = defineRegistry(chatCatalog, {
     ),
 
     AvatarCard: ({ props }) => {
+      const { user } = useAuth();
       const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
       const [bgColor, setBgColor] = useState<string | null>(null);
       const [visible, setVisible] = useState(true);
 
       useEffect(() => {
+        if (!user?.id) return;
+
         // Load active avatar + bg color
         Promise.all([
-          fetch(`${config.backendUrl}/api/avatars?userId=1`).then(r => r.json()),
-          fetch(`${config.backendUrl}/api/avatar/settings?userId=1`).then(r => r.json()),
+          fetch(`${config.backendUrl}/api/avatars?userId=${user.id}&isActive=true`).then(r => r.json()),
+          fetch(`${config.backendUrl}/api/avatar/settings?userId=${user.id}`).then(r => r.json()),
         ]).then(([avatarData, settingsData]) => {
           if (avatarData.success && avatarData.avatars?.length) {
             const active = avatarData.avatars.find((a: { isActive: boolean }) => a.isActive) || avatarData.avatars[0];
@@ -1202,7 +1206,7 @@ export const { registry } = defineRegistry(chatCatalog, {
           }
           if (!bgColor && settingsData.settings?.bgColor) setBgColor(settingsData.settings.bgColor);
         }).catch(() => {});
-      }, []);
+      }, [user?.id]);
 
       const sizeDims: Record<string, { w: number; h: number }> = {
         sm: { w: 200, h: 300 },

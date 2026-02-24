@@ -966,6 +966,7 @@ export function AvatarViewer({
 }: AvatarViewerProps) {
   const [audioAnalyser, setAudioAnalyser] = useState<AnalyserNode | null>(null);
   const [loadError, setLoadError]         = useState<string | null>(null);
+  const [contextLost, setContextLost]     = useState(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const internalZoomRef = useRef<ZoomHandle | null>(null);
   const effectiveZoomRef = zoomRef ?? internalZoomRef;
@@ -1073,9 +1074,40 @@ export function AvatarViewer({
         </div>
       )}
 
+      {contextLost && (
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div className="bg-gray-800/90 text-white text-center px-6 py-4 rounded-xl max-w-xs">
+            <div className="text-4xl mb-3">⚠️</div>
+            <p className="font-semibold mb-1">GPU Context Lost</p>
+            <p className="text-xs text-gray-400">
+              Attempting to restore... If this persists, try closing other 3D views or refreshing the page.
+            </p>
+          </div>
+        </div>
+      )}
+
       <Canvas
         shadows
-        gl={{ antialias: true, alpha: true }}
+        gl={{
+          antialias: true,
+          alpha: true,
+          // WebGL context loss recovery
+          failIfMajorPerformanceCaveat: false,
+          preserveDrawingBuffer: false,
+        }}
+        onCreated={({ gl }) => {
+          // Auto-restore context on loss (common when multiple 3D views are open)
+          const canvas = gl.domElement;
+          canvas.addEventListener('webglcontextlost', (e) => {
+            console.warn('[AvatarViewer] WebGL context lost, preventing default to allow restore');
+            e.preventDefault();
+            setContextLost(true);
+          });
+          canvas.addEventListener('webglcontextrestored', () => {
+            console.log('[AvatarViewer] WebGL context restored successfully');
+            setContextLost(false);
+          });
+        }}
         style={{ position: 'relative', zIndex: 1 }}
       >
         {/* Reactively update canvas background/transparency when bgScene changes */}

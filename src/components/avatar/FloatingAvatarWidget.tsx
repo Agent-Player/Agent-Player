@@ -11,6 +11,7 @@ import {
   ImagePlus, MoreHorizontal, ChevronDown,
 } from 'lucide-react';
 import { useAvatarWidget } from '@/contexts/avatar-widget-context';
+import { useAuth } from '@/contexts/auth-context';
 import { config } from '@/lib/config';
 
 const AvatarViewer = dynamic(
@@ -204,6 +205,7 @@ function VadController({ listening, onSpeechStart, onSpeechEnd }: VadControllerP
 // ── Main widget ───────────────────────────────────────────────────────────────
 export function FloatingAvatarWidget() {
   const { isOpen, close } = useAvatarWidget();
+  const { user } = useAuth();
 
   // Drag
   const [pos, setPos] = useState({ x: 24, y: -1 });
@@ -246,21 +248,59 @@ export function FloatingAvatarWidget() {
   const [sessionId, setSessionId]               = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !user?.id) {
+      console.log('[FloatingWidget] Not loading avatar - isOpen:', isOpen, 'user?.id:', user?.id);
+      return;
+    }
 
-    // Load avatar settings
-    fetch(`${config.backendUrl}/api/avatar/settings?userId=1`)
+    console.log('[FloatingWidget] Loading avatar for user:', user.id);
+
+    // Try to load user's active avatar first (from user_avatars table)
+    fetch(`${config.backendUrl}/api/avatars?userId=${user.id}&isActive=true`)
       .then(r => r.json())
       .then(data => {
-        const url = data.settings?.rpmAvatarUrl;
-        if (data.settings?.bgColor) setBgColor(data.settings.bgColor);
-        if (data.settings?.bgScene) setBgScene(data.settings.bgScene);
-        if (!url) return;
-        fetch(`/api/avatar-model?url=${encodeURIComponent(url)}`)
+        console.log('[FloatingWidget] User avatars response:', data);
+        const avatars = data.avatars || [];
+        const activeAvatar = avatars.find((a: any) => a.isActive);
+
+        if (activeAvatar?.localGlbPath) {
+          console.log('[FloatingWidget] Using active avatar:', activeAvatar.localGlbPath);
+          console.log('[FloatingWidget] Current bgColor:', bgColor);
+          console.log('[FloatingWidget] Current bgScene:', bgScene);
+          setAvatarUrl(activeAvatar.localGlbPath);
+          return;
+        }
+
+        // Fallback: Load from avatar_settings (RPM URL)
+        console.log('[FloatingWidget] No active avatar, trying avatar settings...');
+        return fetch(`${config.backendUrl}/api/avatar/settings?userId=${user.id}`)
           .then(r => r.json())
-          .then(d => setAvatarUrl(d.localUrl || url))
-          .catch(() => setAvatarUrl(url));
-      }).catch(() => {});
+          .then(data => {
+            console.log('[FloatingWidget] Avatar settings:', data);
+            const url = data.settings?.rpmAvatarUrl;
+            // IMPORTANT: Widget always uses dark background (ignore user's saved bgColor/bgScene)
+            // because the small circular frame looks better with dark tones
+            console.log('[FloatingWidget] Keeping default dark background (ignoring saved settings)');
+            if (!url) {
+              console.log('[FloatingWidget] No avatar URL in settings either');
+              return;
+            }
+            console.log('[FloatingWidget] Fetching avatar model from:', url);
+            fetch(`/api/avatar-model?url=${encodeURIComponent(url)}`)
+              .then(r => r.json())
+              .then(d => {
+                console.log('[FloatingWidget] Avatar model response:', d);
+                setAvatarUrl(d.localUrl || url);
+              })
+              .catch((err) => {
+                console.error('[FloatingWidget] Avatar model fetch failed:', err);
+                setAvatarUrl(url);
+              });
+          });
+      })
+      .catch((err) => {
+        console.error('[FloatingWidget] Avatar fetch failed:', err);
+      });
 
     // Load agents + create/reuse a session
     if (selectedAgentId) return; // already loaded
@@ -284,7 +324,7 @@ export function FloatingAvatarWidget() {
           if (id) setSessionId(id);
         }
       }).catch(() => {});
-  }, [isOpen, selectedAgentId]);
+  }, [isOpen, selectedAgentId, user?.id]);
 
   // Conversation
   const [mode, setMode]             = useState<ConvMode>('idle');
@@ -592,7 +632,7 @@ export function FloatingAvatarWidget() {
                 initialPreset="bust"
                 stripRootMotion={LOCOMOTION_IDS.has(currentAnimIdRef.current)}
                 bgColor={bgColor}
-                bgScene={bgScene as any}
+                bgScene="none"
                 className="w-full h-full"
               />
             ) : (

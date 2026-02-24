@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { useMicVAD } from '@ricky0123/vad-react';
 import { Mic, MicOff, Volume2, VolumeX, X, Send } from 'lucide-react';
 import { config } from '@/lib/config';
+import { useAuth } from '@/contexts/auth-context';
 
 // ── Dynamic AvatarViewer (R3F — SSR off) ─────────────────────────────────────
 const AvatarViewer = dynamic(
@@ -132,6 +133,7 @@ export interface SupportChatBlockProps {
 }
 
 export function SupportChatBlock({ agentName = 'Assistant', height = 500, removable = false, bgColor }: SupportChatBlockProps) {
+  const { user } = useAuth();
   const [avatarUrl, setAvatarUrl]         = useState('');
   const [visible, setVisible]             = useState(true);
   const [muted, setMuted]                 = useState(false);
@@ -160,8 +162,10 @@ export function SupportChatBlock({ agentName = 'Assistant', height = 500, remova
 
   // Load avatar settings (URL + background color)
   useEffect(() => {
+    if (!user?.id) return;
+
     // Try new multi-avatar system first, fall back to legacy settings for URL
-    fetch(`${config.backendUrl}/api/avatars?userId=1`)
+    fetch(`${config.backendUrl}/api/avatars?userId=${user.id}&isActive=true`)
       .then(r => r.json())
       .then(data => {
         if (data.success && data.avatars?.length) {
@@ -172,7 +176,7 @@ export function SupportChatBlock({ agentName = 'Assistant', height = 500, remova
       })
       .catch(() => {});
     // Always load bg settings from avatar_settings
-    fetch(`${config.backendUrl}/api/avatar/settings?userId=1`)
+    fetch(`${config.backendUrl}/api/avatar/settings?userId=${user.id}`)
       .then(r => r.json())
       .then(d => {
         if (d.settings?.bgColor) setSavedBgColor(d.settings.bgColor);
@@ -181,7 +185,7 @@ export function SupportChatBlock({ agentName = 'Assistant', height = 500, remova
         if (d.settings?.rpmAvatarUrl) setAvatarUrl(prev => prev || d.settings.rpmAvatarUrl);
       })
       .catch(() => {});
-  }, []);
+  }, [user?.id]);
 
   // Cache avatar GLB locally
   useEffect(() => {
