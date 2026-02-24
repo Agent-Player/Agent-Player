@@ -51,16 +51,15 @@ import { useDeveloperMode } from '@/contexts/developer-context';
 import { useEffect, useState as useReactState } from 'react';
 import { config } from '@/lib/config';
 
-const navigation = [
+// Core navigation items (static)
+const coreNavigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Chat', href: '/chat', icon: MessageSquare },
-    { name: 'Public Chat', href: '/dashboard/public-chat', icon: MessagesSquare },
     // { name: 'Email', href: '/dashboard/email', icon: Mail }, // Moved to email-client extension
     { name: 'Tasks', href: '/dashboard/tasks', icon: ListTodo },
     { name: 'Workflows', href: '/dashboard/workflows', icon: Workflow },
     { name: 'Scheduler', href: '/dashboard/scheduler', icon: Clock },
-    { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
-    { name: 'Team', href: '/dashboard/team', icon: Users },
+    // Calendar, Team, Public Chat moved to extensions
 ];
 
 const avatarSubmenu = [
@@ -104,6 +103,7 @@ export function Sidebar() {
         pathname?.startsWith('/dashboard/channels')
     );
     const [hasChannels, setHasChannels] = useReactState(false);
+    const [extensionRoutes, setExtensionRoutes] = useReactState<Array<{ name: string; href: string; icon: any }>>([]);
     const [avatarOpen, setAvatarOpen] = useState(
         pathname?.startsWith('/avatar-viewer') ||
         pathname?.startsWith('/dashboard/multiverse')
@@ -117,11 +117,20 @@ export function Sidebar() {
     );
     const [showCustomize, setShowCustomize] = useReactState(false);
     const [hiddenItems, setHiddenItems] = useReactState<string[]>([]);
-    const [navOrder, setNavOrder] = useReactState(navigation);
+    const [navOrder, setNavOrder] = useReactState(coreNavigation);
     const [collapsed, setCollapsed] = useReactState(false);
     const [draggedIndex, setDraggedIndex] = useReactState<number | null>(null);
 
     useEffect(() => {
+        // Icon map for dynamic extension routes
+        const iconMap: Record<string, any> = {
+            Calendar,
+            Users,
+            MessagesSquare,
+            Puzzle,
+            // Add more icons as needed
+        };
+
         // Check if there are enabled channel extensions
         const checkChannels = async () => {
             try {
@@ -135,7 +144,32 @@ export function Sidebar() {
                 console.error('Failed to check channel extensions:', err);
             }
         };
+
+        // Fetch extension routes (Calendar, Team, Public Chat, etc.)
+        const loadExtensionRoutes = async () => {
+            try {
+                const response = await fetch(`${config.backendUrl}/api/extensions/enabled-routes`);
+                const data = await response.json();
+
+                if (data.success && data.routes) {
+                    // Filter for 'main' position routes only (exclude settings, developer)
+                    const mainRoutes = data.routes
+                        .filter((route: any) => route.position === 'main')
+                        .map((route: any) => ({
+                            name: route.name,
+                            href: route.href,
+                            icon: iconMap[route.icon] || Puzzle, // Fallback to Puzzle icon
+                        }));
+
+                    setExtensionRoutes(mainRoutes);
+                }
+            } catch (err) {
+                console.error('Failed to load extension routes:', err);
+            }
+        };
+
         checkChannels();
+        loadExtensionRoutes();
 
         // Load sidebar customization from localStorage
         const savedHidden = localStorage.getItem('sidebar_hidden_items');
@@ -149,27 +183,6 @@ export function Sidebar() {
                 console.error('Failed to parse hidden items:', e);
             }
         }
-        if (savedOrder) {
-            try {
-                const orderNames = JSON.parse(savedOrder);
-                // Rebuild navOrder from saved names, preserving icon components
-                const rebuiltOrder = orderNames
-                    .map((name: string) => navigation.find(item => item.name === name))
-                    .filter(Boolean);
-
-                // Add any new items that aren't in the saved order
-                const rebuiltNames = rebuiltOrder.map(item => item.name);
-                const newItems = navigation.filter(item => !rebuiltNames.includes(item.name));
-                const finalOrder = [...rebuiltOrder, ...newItems];
-
-                // If we got valid items, use them, otherwise use default navigation
-                if (finalOrder.length > 0) {
-                    setNavOrder(finalOrder);
-                }
-            } catch (e) {
-                console.error('Failed to parse nav order:', e);
-            }
-        }
         if (savedCollapsed) {
             try {
                 setCollapsed(JSON.parse(savedCollapsed));
@@ -178,6 +191,40 @@ export function Sidebar() {
             }
         }
     }, []);
+
+    // Separate effect to merge extension routes with core navigation
+    useEffect(() => {
+        const allNavigation = [...coreNavigation, ...extensionRoutes];
+
+        // Restore saved order if available
+        const savedOrder = localStorage.getItem('sidebar_nav_order');
+        if (savedOrder) {
+            try {
+                const orderNames = JSON.parse(savedOrder);
+                // Rebuild navOrder from saved names, preserving icon components
+                const rebuiltOrder = orderNames
+                    .map((name: string) => allNavigation.find(item => item.name === name))
+                    .filter(Boolean);
+
+                // Add any new items that aren't in the saved order
+                const rebuiltNames = rebuiltOrder.map(item => item.name);
+                const newItems = allNavigation.filter(item => !rebuiltNames.includes(item.name));
+                const finalOrder = [...rebuiltOrder, ...newItems];
+
+                // If we got valid items, use them, otherwise use default navigation
+                if (finalOrder.length > 0) {
+                    setNavOrder(finalOrder);
+                } else {
+                    setNavOrder(allNavigation);
+                }
+            } catch (e) {
+                console.error('Failed to parse nav order:', e);
+                setNavOrder(allNavigation);
+            }
+        } else {
+            setNavOrder(allNavigation);
+        }
+    }, [extensionRoutes]);
 
     const toggleItemVisibility = (itemName: string) => {
         const newHidden = hiddenItems.includes(itemName)
@@ -198,7 +245,7 @@ export function Sidebar() {
 
     const resetCustomization = () => {
         setHiddenItems([]);
-        setNavOrder(navigation);
+        setNavOrder([...coreNavigation, ...extensionRoutes]);
         localStorage.removeItem('sidebar_hidden_items');
         localStorage.removeItem('sidebar_nav_order');
     };

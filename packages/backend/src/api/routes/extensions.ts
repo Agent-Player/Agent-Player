@@ -348,5 +348,72 @@ export async function extensionsRoutes(fastify: FastifyInstance) {
     }
   });
 
+  /**
+   * GET /api/extensions/enabled-routes - Get frontend routes from enabled extensions
+   * Used by sidebar to dynamically show/hide extension pages
+   */
+  fastify.get('/api/extensions/enabled-routes', {
+    schema: {
+      tags: ['Extensions'],
+      description: 'Get frontend routes from all enabled extensions',
+    },
+  }, async (request, reply) => {
+    try {
+      const db = getDatabase();
+      const routes = [];
+
+      // Get all enabled extensions
+      const enabledExtensions = db
+        .prepare('SELECT extension_id FROM extension_configs WHERE enabled = 1')
+        .all() as Array<{ extension_id: string }>;
+
+      if (!enabledExtensions.length) {
+        return {
+          success: true,
+          routes: [],
+        };
+      }
+
+      // Read manifest for each enabled extension to get frontendRoutes
+      for (const { extension_id } of enabledExtensions) {
+        // Try both manifest filename formats
+        let manifestPath = join(extensionsDir, extension_id, 'agentplayer.plugin.json');
+        if (!existsSync(manifestPath)) {
+          manifestPath = join(extensionsDir, extension_id, 'agent-player.plugin.json');
+        }
+
+        if (!existsSync(manifestPath)) continue;
+
+        try {
+          const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+
+          // Add frontendRoutes if defined
+          if (manifest.frontendRoutes && Array.isArray(manifest.frontendRoutes)) {
+            for (const route of manifest.frontendRoutes) {
+              routes.push({
+                id: extension_id,
+                name: route.name || manifest.name,
+                href: route.path,
+                icon: route.icon || 'Puzzle',
+                position: route.position || 'main', // main, settings, developer
+              });
+            }
+          }
+        } catch (err) {
+          console.error(`[Extensions API] ⚠️  Failed to read manifest for ${extension_id}:`, err);
+        }
+      }
+
+      return {
+        success: true,
+        routes,
+      };
+    } catch (error: any) {
+      console.error('[Extensions API] ❌ Get enabled routes failed:', error);
+      // SECURITY: Use centralized error handler to prevent info disclosure (H-09)
+      return handleError(reply, error, 'internal', '[Extensions]');
+    }
+  });
+
   console.log('[Extensions API] ✅ Routes registered');
 }
