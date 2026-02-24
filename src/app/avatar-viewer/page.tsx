@@ -2742,18 +2742,29 @@ function AvatarViewerContent() {
 
     // If ?id= is provided, resolve avatar record from backend first
     if (avatarId) {
+      console.log('[AvatarViewer] Fetching avatar with ID:', avatarId);
       fetch(`${config.backendUrl}/api/avatars/${avatarId}`)
-        .then(r => r.json())
+        .then(r => {
+          console.log('[AvatarViewer] Avatar fetch response status:', r.status);
+          return r.json();
+        })
         .then(data => {
+          console.log('[AvatarViewer] Avatar data received:', data);
           if (data.success && data.avatar) {
             const url = data.avatar.localGlbPath || data.avatar.glbUrl || '';
+            console.log('[AvatarViewer] Avatar URL extracted:', url);
             if (url) {
-              setAvatarUrl(url.startsWith('http') ? url : url);
+              setAvatarUrl(url);
               setCacheStatus('local');
+              console.log('[AvatarViewer] Avatar URL set successfully');
             }
+          } else {
+            console.error('[AvatarViewer] No avatar in response or success=false');
           }
         })
-        .catch(() => {});
+        .catch(err => {
+          console.error('[AvatarViewer] Error fetching avatar:', err);
+        });
       return;
     }
 

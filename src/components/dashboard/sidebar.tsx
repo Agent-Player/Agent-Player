@@ -235,39 +235,31 @@ export function Sidebar() {
     return (
         <div className={cn("flex flex-col border-r bg-card transition-all duration-300", collapsed ? "w-16" : "w-64")}>
             {/* Header with Toggle and Settings */}
-            <div className="flex h-16 items-center justify-between border-b px-3">
+            <div className="flex h-16 items-center justify-end border-b px-3 gap-1">
                 {!collapsed ? (
                     <>
-                        <Link href="/dashboard" className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                                <Bot className="h-5 w-5" />
-                            </div>
-                            <span className="text-lg font-semibold">Agent Player</span>
-                        </Link>
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={() => setShowCustomize(true)}
-                                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                                title="Customize Sidebar"
-                            >
-                                <Sliders className="h-5 w-5" />
-                            </button>
-                            <button
-                                onClick={toggleCollapsed}
-                                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                                title="Collapse Sidebar"
-                            >
-                                <PanelLeftClose className="h-5 w-5" />
-                            </button>
-                        </div>
+                        <button
+                            onClick={() => setShowCustomize(true)}
+                            className="rounded-md p-1.5 text-muted-foreground/60 transition-all hover:bg-muted/50 hover:text-foreground"
+                            title="Customize Sidebar"
+                        >
+                            <Sliders className="h-4 w-4" />
+                        </button>
+                        <button
+                            onClick={toggleCollapsed}
+                            className="rounded-md p-1.5 text-muted-foreground/60 transition-all hover:bg-muted/50 hover:text-foreground"
+                            title="Collapse Sidebar"
+                        >
+                            <PanelLeftClose className="h-4 w-4" />
+                        </button>
                     </>
                 ) : (
                     <button
                         onClick={toggleCollapsed}
-                        className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground mx-auto"
+                        className="rounded-md p-1.5 text-muted-foreground/60 transition-all hover:bg-muted/50 hover:text-foreground mx-auto"
                         title="Expand Sidebar"
                     >
-                        <PanelLeft className="h-5 w-5" />
+                        <PanelLeft className="h-4 w-4" />
                     </button>
                 )}
             </div>

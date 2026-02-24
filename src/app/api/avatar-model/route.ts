@@ -15,7 +15,7 @@ import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 
-const CACHE_DIR = path.join(process.cwd(), 'public', 'avatar-cache');
+const CACHE_DIR = path.join(process.cwd(), 'public', 'storage', 'cache');
 
 async function ensureCacheDir() {
   try { await fs.mkdir(CACHE_DIR, { recursive: true }); } catch { /* exists */ }
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
   await ensureCacheDir();
   const filename = urlToFilename(glbUrl);
   const cachePath = path.join(CACHE_DIR, filename);
-  const localUrl = `/avatar-cache/${filename}`;
+  const localUrl = `/storage/cache/${filename}`;
 
   try {
     await fs.access(cachePath);
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
   await ensureCacheDir();
   const filename = urlToFilename(glbUrl);
   const cachePath = path.join(CACHE_DIR, filename);
-  const localUrl = `/avatar-cache/${filename}`;
+  const localUrl = `/storage/cache/${filename}`;
 
   // Already cached
   try { await fs.access(cachePath); return NextResponse.json({ localUrl }); } catch { /* continue */ }

@@ -15,7 +15,7 @@ import path from 'path';
 
 export const runtime = 'nodejs';
 
-const CACHE_DIR = path.join(process.cwd(), 'public', 'avatar-cache');
+const CACHE_DIR = path.join(process.cwd(), 'public', 'storage', 'cache');
 
 async function ensureCacheDir() {
   try { await fs.mkdir(CACHE_DIR, { recursive: true }); } catch { /* exists */ }

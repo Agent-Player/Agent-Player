@@ -976,8 +976,9 @@ export function AvatarViewer({
     (
       avatarUrl.startsWith('http://') ||
       avatarUrl.startsWith('https://') ||
-      avatarUrl.startsWith('/avatar-cache/') || // Local cached GLB
-      avatarUrl.startsWith('/avatars/')          // Local user/system avatars
+      avatarUrl.startsWith('/storage/') ||       // Unified storage (NEW)
+      avatarUrl.startsWith('/avatar-cache/') ||  // Legacy path
+      avatarUrl.startsWith('/avatars/')          // Legacy path
     ) &&
     !avatarUrl.includes('example.com');
 
