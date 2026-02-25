@@ -1,24 +1,10 @@
--- Migration 037: Multi-Tier Memory System
+-- Migration 040: Multi-Tier Memory System
 -- Three-tier memory architecture: Working → Experiential → Factual
 -- Based on research: https://arxiv.org/abs/2512.13564
-
--- Add memory_layer column to existing memories table
-ALTER TABLE memories ADD COLUMN memory_layer TEXT DEFAULT 'factual' CHECK (memory_layer IN ('working', 'experiential', 'factual'));
-
--- Add expiry_timestamp for working memory (auto-expire after session)
-ALTER TABLE memories ADD COLUMN expiry_timestamp INTEGER;
-
--- Add consolidation_status for experiential memory
-ALTER TABLE memories ADD COLUMN consolidation_status TEXT DEFAULT 'pending' CHECK (consolidation_status IN ('pending', 'consolidated', 'promoted'));
-
--- Add importance_score for determining promotion between layers
-ALTER TABLE memories ADD COLUMN importance_score REAL DEFAULT 0.5;
-
--- Add access_count to track how often memory is accessed
-ALTER TABLE memories ADD COLUMN access_count INTEGER DEFAULT 0;
-
--- Add last_accessed_at timestamp
-ALTER TABLE memories ADD COLUMN last_accessed_at INTEGER;
+--
+-- Note: The memories table columns (memory_layer, expiry_timestamp, consolidation_status,
+-- importance_score, access_count, last_accessed_at) are already defined in the initial
+-- CREATE TABLE in storage.ts. This migration only creates indexes and the consolidation log table.
 
 -- Create index for efficient layer-based queries
 CREATE INDEX IF NOT EXISTS idx_memories_layer ON memories(memory_layer);

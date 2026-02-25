@@ -38,7 +38,9 @@
       "Bash(du:*)",
       "Bash(pnpm:*)",
       "Bash(Remove-Item \"c:\\\\xampp\\\\htdocs\\\\agent_player\\\\packages\\\\backend\\\\src\\\\db\\\\migrations\\\\005_inbox_system.sql\" -Force)",
-      "Bash(gemini:*)"
+      "Bash(gemini:*)",
+      "Bash(echo \"renamed 037 -> 040\")",
+      "Bash(echo \"renamed 040 -> 041\")"
     ]
   }
 }
