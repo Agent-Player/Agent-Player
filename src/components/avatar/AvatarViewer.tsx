@@ -1127,6 +1127,7 @@ export function AvatarViewer({
 
   // Connect audio → Web Audio API for lip sync
   const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   useEffect(() => {
     if (!audioElement) return;
     if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
@@ -1134,29 +1135,32 @@ export function AvatarViewer({
     }
     const ctx = audioCtxRef.current;
     ctx.resume().catch(() => {});
+
+    // Create analyser (always fresh)
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
-    // Reuse existing MediaElementSource if the element was already connected
-    // (React StrictMode double-mount, or HMR re-render)
+    analyserRef.current = analyser;
+
+    // Create MediaElementSource once per audio element (can only be called once)
     if (!mediaSourceRef.current) {
       try {
         mediaSourceRef.current = ctx.createMediaElementSource(audioElement);
       } catch {
-        // Element already connected by a previous context — analyser gets no data,
-        // but procedural fallback in useFrame will simulate lip movement
+        // Already connected — will use procedural fallback for lip sync
       }
     }
+
+    // Wire: MediaElementSource → Analyser → Speakers
     if (mediaSourceRef.current) {
+      try { mediaSourceRef.current.disconnect(); } catch {} // disconnect from previous analyser
       mediaSourceRef.current.connect(analyser);
       analyser.connect(ctx.destination);
     }
     setAudioAnalyser(analyser);
+
     return () => {
-      // Disconnect analyser on cleanup (but keep the MediaElementSource alive)
+      // Only disconnect the analyser from destination; keep MediaElementSource alive
       try { analyser.disconnect(); } catch {}
-      if (mediaSourceRef.current) {
-        try { mediaSourceRef.current.disconnect(); } catch {}
-      }
     };
   }, [audioElement]);
 
