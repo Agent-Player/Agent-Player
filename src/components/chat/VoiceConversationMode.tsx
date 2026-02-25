@@ -87,6 +87,7 @@ export function VoiceConversationMode({
 
   // Start/stop VAD based on conversation state
   useEffect(() => {
+    if (vad.loading) return;
     if (isActive && state === 'listening') {
       vad.start();
     } else {
@@ -94,13 +95,13 @@ export function VoiceConversationMode({
     }
 
     return () => {
-      vad.pause();
+      if (!vad.loading) vad.pause();
     };
-  }, [isActive, state]);
+  }, [isActive, state, vad.loading]);
 
   const toggleConversation = () => {
     if (isActive) {
-      vad.pause();
+      if (!vad.loading) vad.pause();
       stop();
     } else {
       startConversation();

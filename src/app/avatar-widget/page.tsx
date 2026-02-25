@@ -249,6 +249,7 @@ function WidgetContent() {
   vadRef.current = vad;
 
   const toggleVAD = () => {
+    if (vad.loading) return;
     if (vadEnabled) { vadRef.current?.pause(); setVadEnabled(false); setMode('idle'); }
     else            { vadRef.current?.start(); setVadEnabled(true);  setMode('listening'); }
   };

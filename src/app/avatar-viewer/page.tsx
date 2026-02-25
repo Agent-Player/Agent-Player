@@ -1760,11 +1760,14 @@ interface AnimPanelProps {
   onDemoUiOverlay: (id: string) => void;
   // Custom GIF sender
   onSendGif: (gifUrl: string, title: string) => void;
+  // Shadow toggle
+  showShadow: boolean;
+  onShowShadowChange: (v: boolean) => void;
 }
 
 type PanelTab = 'anim' | 'scene' | 'camera' | 'fx' | 'notif' | 'ui';
 
-function AnimPanel({ gender, activeUrl, onSelect, onGenderToggle, avatarY, onAvatarYChange, onPreset, bgColor, onBgColorChange, bgSaved, bgScene, onBgSceneChange, wallText, onWallTextChange, wallLogoUrl, onWallLogoUrlChange, wallVideoUrl, onWallVideoUrlChange, wallLayout, onWallLayoutChange, youtubeNoCookie, onYoutubeNoCookieChange, hasDraftChanges, onApply, matrixOn, onMatrixToggle, matrixSpeed, onMatrixSpeedChange, matrixOpacity, onMatrixOpacityChange, matrixDensity, onMatrixDensityChange, onEmojiRain, onDemoNotif, fxState, onFxChange, notifAutoWeather, onNotifAutoWeatherChange, onApplyPreset, spotifyUrl, onSpotifyUrlChange, spotifyOpen, onSpotifyToggle, onDemoUiOverlay, onSendGif, worlds, worldsLoading }: AnimPanelProps) {
+function AnimPanel({ gender, activeUrl, onSelect, onGenderToggle, avatarY, onAvatarYChange, onPreset, bgColor, onBgColorChange, bgSaved, bgScene, onBgSceneChange, wallText, onWallTextChange, wallLogoUrl, onWallLogoUrlChange, wallVideoUrl, onWallVideoUrlChange, wallLayout, onWallLayoutChange, youtubeNoCookie, onYoutubeNoCookieChange, hasDraftChanges, onApply, matrixOn, onMatrixToggle, matrixSpeed, onMatrixSpeedChange, matrixOpacity, onMatrixOpacityChange, matrixDensity, onMatrixDensityChange, onEmojiRain, onDemoNotif, fxState, onFxChange, notifAutoWeather, onNotifAutoWeatherChange, onApplyPreset, spotifyUrl, onSpotifyUrlChange, spotifyOpen, onSpotifyToggle, onDemoUiOverlay, onSendGif, showShadow, onShowShadowChange }: AnimPanelProps) {
   const [tab, setTab] = useState<PanelTab>('anim');
   const [notifSearch, setNotifSearch] = useState('');
   const [uiSearch, setUiSearch]       = useState('');
@@ -1960,7 +1963,7 @@ function AnimPanel({ gender, activeUrl, onSelect, onGenderToggle, avatarY, onAva
               </span>
             </div>
             <button
-              onClick={() => setShowShadow(prev => !prev)}
+              onClick={() => onShowShadowChange(!showShadow)}
               className={`w-full text-xs py-2 px-3 rounded text-left transition-colors ${
                 showShadow
                   ? 'bg-blue-600 text-white font-medium'
@@ -4048,12 +4051,12 @@ function AvatarViewerContent() {
   // Cleanup VAD on unmount to prevent "null stream, audio context, or processor adapter" error
   useEffect(() => {
     return () => {
-      if (vadRef.current) {
+      if (vadRef.current && !vad.loading) {
         vadRef.current.pause();
-        vadRef.current = null;
       }
+      vadRef.current = null;
     };
-  }, []);
+  }, [vad.loading]);
 
   /** Play the next queued animation segment, or return to idle if queue is empty. */
   const playNextSegment = useCallback(() => {
@@ -4094,9 +4097,10 @@ function AvatarViewerContent() {
   }, [vadEnabled, gender, playNextSegment]);
 
   const toggleVAD = useCallback(() => {
+    if (vad.loading) return;
     if (vadEnabled) { vadRef.current?.pause(); setVadEnabled(false); setMode('idle'); }
     else { vadRef.current?.start(); setVadEnabled(true); setMode('listening'); }
-  }, [vadEnabled]);
+  }, [vadEnabled, vad.loading]);
 
   const toggleMute = () => {
     if (audioElement) audioElement.muted = !isMuted;
@@ -4597,6 +4601,8 @@ function AvatarViewerContent() {
             onSpotifyToggle={() => setSpotifyOpen(o => !o)}
             onDemoUiOverlay={addUiOverlay}
             onSendGif={sendGif}
+            showShadow={showShadow}
+            onShowShadowChange={setShowShadow}
           />
         )}
       </div>
