@@ -4,10 +4,12 @@ import {
   Suspense, useRef, useEffect, useState, useMemo,
   Component, ErrorInfo, ReactNode, forwardRef, useImperativeHandle
 } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
 import { useGLTF, OrbitControls, PerspectiveCamera, Environment, ContactShadows, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { isFbxUrl, normalizeMixamoTracks, normalizeFbxBoneNames } from '@/lib/three-utils/fbx-helpers';
 import {
   OfficeScene,
   LivingRoomScene,
@@ -597,6 +599,33 @@ const ZoomController = forwardRef<ZoomHandle, {}>((_, ref) => {
 });
 ZoomController.displayName = 'ZoomController';
 
+// ─── Format-specific loaders (avoid conditional hook calls) ──────────────────
+function GlbSceneLoader({ url, children }: { url: string; children: (scene: THREE.Object3D) => ReactNode }) {
+  const { scene } = useGLTF(url);
+  return <>{children(scene)}</>;
+}
+
+function FbxSceneLoader({ url, children }: { url: string; children: (scene: THREE.Object3D) => ReactNode }) {
+  const group = useLoader(FBXLoader, url);
+  // Normalize Mixamo bone names (strip "mixamorig" prefix); scale handled by primitiveScale in AvatarModelCore
+  useMemo(() => {
+    normalizeFbxBoneNames(group);
+  }, [group]);
+  return <>{children(group)}</>;
+}
+
+function GlbAnimLoader({ url, children }: { url: string; children: (anims: THREE.AnimationClip[]) => ReactNode }) {
+  const { animations } = useGLTF(url);
+  return <>{children(animations)}</>;
+}
+
+function FbxAnimLoader({ url, children }: { url: string; children: (anims: THREE.AnimationClip[]) => ReactNode }) {
+  const group = useLoader(FBXLoader, url);
+  // Normalize Mixamo bone names (strip "mixamorig:" prefix)
+  const normalized = useMemo(() => normalizeMixamoTracks(group.animations), [group.animations]);
+  return <>{children(normalized)}</>;
+}
+
 // ─── Avatar model ─────────────────────────────────────────────────────────────
 interface AvatarModelProps {
   url: string;
@@ -607,26 +636,106 @@ interface AvatarModelProps {
   stripRootMotion: boolean;
   facialExpression?: FacialExpression;
   lipsyncCues?: LipsyncCue[];
-  audioEl?: HTMLAudioElement | null; // audio element — use .currentTime for precise lipsync timing
+  audioEl?: HTMLAudioElement | null;
   avatarRef?: React.RefObject<THREE.Group>;
 }
 
-function AvatarModel({ url, isPlaying, audioAnalyser, animationUrl, avatarY, stripRootMotion, facialExpression, lipsyncCues, audioEl, avatarRef: externalAvatarRef }: AvatarModelProps) {
-  const { scene } = useGLTF(url);
-  // SkeletonUtils.clone properly rebinds SkinnedMesh skeletons to cloned bones
-  const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene]);
+/** Bridge: picks the right loader based on file extension, passes scene+anims to core */
+function AvatarModel(props: AvatarModelProps) {
+  const { url, animationUrl } = props;
+  const SceneLoader = isFbxUrl(url) ? FbxSceneLoader : GlbSceneLoader;
+  const AnimLoader = isFbxUrl(animationUrl) ? FbxAnimLoader : GlbAnimLoader;
 
-  const { animations: rawAnims } = useGLTF(animationUrl);
+  return (
+    <SceneLoader url={url}>
+      {(scene) => (
+        <AnimLoader url={animationUrl}>
+          {(rawAnims) => (
+            <AvatarModelCore {...props} loadedScene={scene} rawAnims={rawAnims} isFbx={isFbxUrl(url)} isAnimFbx={isFbxUrl(animationUrl)} />
+          )}
+        </AnimLoader>
+      )}
+    </SceneLoader>
+  );
+}
 
-  // For locomotion: strip Hips position tracks so avatar stays in-place
+interface AvatarModelCoreProps extends Omit<AvatarModelProps, 'url' | 'animationUrl'> {
+  loadedScene: THREE.Object3D;
+  rawAnims: THREE.AnimationClip[];
+  isFbx?: boolean;
+  isAnimFbx?: boolean;
+}
+
+function AvatarModelCore({ loadedScene, rawAnims, isPlaying, audioAnalyser, avatarY, stripRootMotion, facialExpression, lipsyncCues, audioEl, avatarRef: externalAvatarRef, isFbx, isAnimFbx }: AvatarModelCoreProps) {
+  // Compute the right display scale: FBX in centimeters needs 0.01 factor
+  const primitiveScale = useMemo(() => {
+    if (isFbx) {
+      const bbox = new THREE.Box3().setFromObject(loadedScene);
+      const height = bbox.max.y - bbox.min.y;
+      if (height > 50) {
+        // FBX in centimeters: scale 0.01 (→ meters) × 1.8 (display scale)
+        return 0.01 * 1.8;
+      }
+    }
+    return 1.8;
+  }, [loadedScene, isFbx]);
+
+  const cloned = useMemo(() => {
+    let c: THREE.Object3D;
+    if (isFbx) {
+      // FBX: use original scene directly — SkeletonUtils.clone can break
+      // FBX skeleton structure (bones get disconnected from the scene tree).
+      c = loadedScene;
+      // Normalize Mixamo bone names (strip "mixamorig" prefix)
+      normalizeFbxBoneNames(c);
+    } else {
+      // GLB: use SkeletonUtils.clone (needed because useGLTF shares scene object)
+      c = SkeletonUtils.clone(loadedScene);
+    }
+    return c;
+  }, [loadedScene, isFbx]);
+
+  // Normalize animation track names (strip mixamorig prefix) + strip root motion if needed
+  // Also scale position tracks when applying GLB animations (meters) to FBX model (centimeters)
   const loadedAnims = useMemo(() => {
-    if (!stripRootMotion || !rawAnims.length) return rawAnims;
-    return rawAnims.map((clip) => {
+    if (!rawAnims.length) return rawAnims;
+    let clips = rawAnims.map((clip) => {
       const c = clip.clone();
-      c.tracks = c.tracks.filter((t) => !t.name.match(/^Hips\.position/));
+      // Strip mixamorig prefix from track names
+      c.tracks = c.tracks.map((track: THREE.KeyframeTrack) => {
+        track.name = track.name.replace(/mixamorig:?/g, '');
+        return track;
+      });
+      // Cross-format: GLB animation (meters) on FBX model (centimeters)
+      // Only scale the root bone (Hips) position ×100 — it controls character placement.
+      // Strip all other position tracks so the FBX skeleton's own proportions hold;
+      // rotations (quaternions) are scale-independent and drive the pose correctly.
+      if (isFbx && !isAnimFbx) {
+        c.tracks = c.tracks.filter((track: THREE.KeyframeTrack) => {
+          if (!track.name.endsWith('.position')) return true; // keep rotations & scale
+          if (track.name === 'Hips.position') {
+            // Scale root position: meters → centimeters
+            const values = track.values;
+            for (let i = 0; i < values.length; i++) {
+              values[i] *= 100;
+            }
+            return true;
+          }
+          return false; // strip non-root position tracks (prevents proportion distortion)
+        });
+      }
       return c;
     });
-  }, [rawAnims, stripRootMotion]);
+    // For locomotion: strip Hips position tracks so avatar stays in-place
+    if (stripRootMotion) {
+      clips = clips.map((clip) => {
+        const c = clip.clone();
+        c.tracks = c.tracks.filter((t: THREE.KeyframeTrack) => !t.name.match(/^Hips\.position/));
+        return c;
+      });
+    }
+    return clips;
+  }, [rawAnims, stripRootMotion, isFbx, isAnimFbx]);
 
   const internalGroupRef = useRef<THREE.Group>(null);
   const groupRef = externalAvatarRef || internalGroupRef;
@@ -821,7 +930,7 @@ function AvatarModel({ url, isPlaying, audioAnalyser, animationUrl, avatarY, str
 
   return (
     <group ref={groupRef} position={[0, avatarY, 0]}>
-      <primitive object={cloned} scale={1.8} />
+      <primitive object={cloned} scale={primitiveScale} />
     </group>
   );
 }
@@ -972,12 +1081,12 @@ export function AvatarViewer({
   const effectiveZoomRef = zoomRef ?? internalZoomRef;
   const avatarRef = useRef<THREE.Group>(null);
 
-  const isValidGlbUrl =
+  const isValidModelUrl =
     avatarUrl &&
     (
       avatarUrl.startsWith('http://') ||
       avatarUrl.startsWith('https://') ||
-      avatarUrl.startsWith('/storage/') ||       // Unified storage (NEW)
+      avatarUrl.startsWith('/storage/') ||       // Unified storage
       avatarUrl.startsWith('/avatar-cache/') ||  // Legacy path
       avatarUrl.startsWith('/avatars/')          // Legacy path
     ) &&
@@ -1060,7 +1169,7 @@ export function AvatarViewer({
         </div>
       )}
 
-      {!isValidGlbUrl && (
+      {!isValidModelUrl && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
           <div className="bg-gray-800/90 text-white text-center px-6 py-4 rounded-xl max-w-xs">
             <div className="text-4xl mb-3">🎭</div>
@@ -1130,7 +1239,7 @@ export function AvatarViewer({
 
         <ZoomController ref={effectiveZoomRef} />
 
-        {isValidGlbUrl ? (
+        {isValidModelUrl ? (
           <AvatarErrorBoundary onError={(e) => setLoadError(e.message)}>
             <Suspense fallback={<LoadingFallback />}>
               <AvatarModel

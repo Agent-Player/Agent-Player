@@ -306,7 +306,7 @@ export default function AvatarSettingsPage() {
       const form = new FormData();
       form.append('file', file);
       const res = await fetch(
-        `${config.backendUrl}/api/avatars/upload?userId=${userId}&name=${encodeURIComponent(file.name.replace(/\.glb$/i, ''))}`,
+        `${config.backendUrl}/api/avatars/upload?userId=${userId}&name=${encodeURIComponent(file.name.replace(/\.(glb|gltf|fbx)$/i, ''))}`,
         { method: 'POST', body: form }
       );
       const data = await res.json();
@@ -548,7 +548,7 @@ export default function AvatarSettingsPage() {
                   addMode === 'upload' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                <Upload size={14} /> Upload GLB
+                <Upload size={14} /> Upload Model
               </button>
               <a
                 href="/avatar-creator"
@@ -617,7 +617,7 @@ export default function AvatarSettingsPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".glb,.gltf"
+                  accept=".glb,.gltf,.fbx"
                   className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) uploadGlb(f); }}
                 />
@@ -627,11 +627,29 @@ export default function AvatarSettingsPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   <Upload size={16} />
-                  {uploadStatus === 'uploading' ? 'Uploading...' : 'Choose .glb file'}
+                  {uploadStatus === 'uploading' ? 'Uploading...' : 'Choose .glb or .fbx file'}
                 </button>
                 {uploadStatus === 'done' && <p className="text-sm text-green-600 mt-2">Uploaded successfully</p>}
-                {uploadStatus === 'error' && <p className="text-sm text-red-500 mt-2">Upload failed — only .glb files allowed</p>}
-                <p className="text-xs text-gray-500 mt-2">Accepts .glb and .gltf files</p>
+                {uploadStatus === 'error' && <p className="text-sm text-red-500 mt-2">Upload failed — only .glb or .fbx files allowed</p>}
+                <p className="text-xs text-gray-500 mt-2">Accepts .glb, .gltf, and .fbx (Mixamo) files</p>
+                <div className="flex gap-3 mt-2">
+                  <a
+                    href="https://www.mixamo.com/#/?page=1&type=Character"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-500 hover:text-blue-400"
+                  >
+                    Mixamo Characters &rarr;
+                  </a>
+                  <a
+                    href="https://www.mixamo.com/#/?page=1&type=Motion%2CMotionPack"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-500 hover:text-blue-400"
+                  >
+                    Mixamo Animations &rarr;
+                  </a>
+                </div>
               </div>
             )}
 

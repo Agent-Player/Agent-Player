@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { Suspense, useState, useRef, useCallback, useEffect, useMemo, type RefObject } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useMicVAD } from '@ricky0123/vad-react';
@@ -10,7 +10,7 @@ import {
   Sun, Moon, Cloud, CloudRain, Snowflake, CloudLightning, Leaf, Sparkles, Flame, Cpu,
   Camera, CameraOff, Circle, Square, Link, Eye, EyeOff, SlidersHorizontal, Mountain,
   Video, Home, Bell, Puzzle, Palette, FileText, Image as ImageIcon, Brush, Check,
-  Search, CheckCircle2, XCircle
+  Search, CheckCircle2, XCircle, Upload, RefreshCw
 } from 'lucide-react';
 import { config } from '@/lib/config';
 import { useDeveloperMode } from '@/contexts/developer-context';
@@ -1763,11 +1763,17 @@ interface AnimPanelProps {
   // Shadow toggle
   showShadow: boolean;
   onShowShadowChange: (v: boolean) => void;
+  // Custom animations (Mixamo uploads)
+  customAnims: Array<{ id: string; name: string; localPath: string; format: string; category: string }>;
+  onUploadAnim: (file: File) => void;
+  onDeleteAnim: (id: string) => void;
+  animUploadStatus: 'idle' | 'uploading' | 'done' | 'error';
+  animFileInputRef: RefObject<HTMLInputElement | null>;
 }
 
 type PanelTab = 'anim' | 'scene' | 'camera' | 'fx' | 'notif' | 'ui';
 
-function AnimPanel({ gender, activeUrl, onSelect, onGenderToggle, avatarY, onAvatarYChange, onPreset, bgColor, onBgColorChange, bgSaved, bgScene, onBgSceneChange, wallText, onWallTextChange, wallLogoUrl, onWallLogoUrlChange, wallVideoUrl, onWallVideoUrlChange, wallLayout, onWallLayoutChange, youtubeNoCookie, onYoutubeNoCookieChange, hasDraftChanges, onApply, matrixOn, onMatrixToggle, matrixSpeed, onMatrixSpeedChange, matrixOpacity, onMatrixOpacityChange, matrixDensity, onMatrixDensityChange, onEmojiRain, onDemoNotif, fxState, onFxChange, notifAutoWeather, onNotifAutoWeatherChange, onApplyPreset, spotifyUrl, onSpotifyUrlChange, spotifyOpen, onSpotifyToggle, onDemoUiOverlay, onSendGif, showShadow, onShowShadowChange }: AnimPanelProps) {
+function AnimPanel({ gender, activeUrl, onSelect, onGenderToggle, avatarY, onAvatarYChange, onPreset, bgColor, onBgColorChange, bgSaved, bgScene, onBgSceneChange, wallText, onWallTextChange, wallLogoUrl, onWallLogoUrlChange, wallVideoUrl, onWallVideoUrlChange, wallLayout, onWallLayoutChange, youtubeNoCookie, onYoutubeNoCookieChange, hasDraftChanges, onApply, matrixOn, onMatrixToggle, matrixSpeed, onMatrixSpeedChange, matrixOpacity, onMatrixOpacityChange, matrixDensity, onMatrixDensityChange, onEmojiRain, onDemoNotif, fxState, onFxChange, notifAutoWeather, onNotifAutoWeatherChange, onApplyPreset, spotifyUrl, onSpotifyUrlChange, spotifyOpen, onSpotifyToggle, onDemoUiOverlay, onSendGif, showShadow, onShowShadowChange, customAnims, onUploadAnim, onDeleteAnim, animUploadStatus, animFileInputRef }: AnimPanelProps) {
   const [tab, setTab] = useState<PanelTab>('anim');
   const [notifSearch, setNotifSearch] = useState('');
   const [uiSearch, setUiSearch]       = useState('');
@@ -1881,6 +1887,81 @@ function AnimPanel({ gender, activeUrl, onSelect, onGenderToggle, avatarY, onAva
                 </div>
               </div>
             ))}
+
+            {/* ── Custom / Mixamo animations ── */}
+            {customAnims.length > 0 && (
+              <div>
+                <div className="text-xs text-gray-500 font-semibold px-1 mb-1">
+                  🎬 Custom
+                </div>
+                <div className="space-y-1">
+                  {customAnims.map((a) => (
+                    <div key={a.id} className="flex items-center gap-1">
+                      <button
+                        onClick={() => onSelect(a.localPath)}
+                        className={`flex-1 text-left px-2 py-1.5 rounded text-xs transition-colors truncate ${
+                          activeUrl === a.localPath
+                            ? 'bg-blue-600 text-white font-medium'
+                            : 'text-gray-300 hover:bg-gray-700'
+                        }`}
+                        title={`${a.name} (.${a.format})`}
+                      >
+                        {activeUrl === a.localPath && '▶ '}
+                        {a.name}
+                        <span className="text-[9px] text-gray-500 ml-1">.{a.format}</span>
+                      </button>
+                      <button
+                        onClick={() => onDeleteAnim(a.id)}
+                        className="p-1 text-gray-600 hover:text-red-400 transition-colors shrink-0"
+                        title="Delete animation"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload FBX/GLB animation */}
+            <div className="border-t border-gray-700 pt-2">
+              <input
+                ref={animFileInputRef}
+                type="file"
+                accept=".fbx,.glb"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onUploadAnim(f);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                onClick={() => animFileInputRef.current?.click()}
+                disabled={animUploadStatus === 'uploading'}
+                className="w-full text-xs py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+              >
+                {animUploadStatus === 'uploading' ? (
+                  <><RefreshCw className="w-3 h-3 animate-spin" /> Uploading...</>
+                ) : (
+                  <><Upload className="w-3 h-3" /> Upload FBX / GLB</>
+                )}
+              </button>
+              {animUploadStatus === 'done' && (
+                <p className="text-[10px] text-green-400 text-center mt-1">Upload complete!</p>
+              )}
+              {animUploadStatus === 'error' && (
+                <p className="text-[10px] text-red-400 text-center mt-1">Upload failed</p>
+              )}
+              <a
+                href="https://www.mixamo.com/#/?page=1&type=Motion%2CMotionPack"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-[10px] text-blue-400 hover:text-blue-300 text-center mt-1.5"
+              >
+                Browse Mixamo Animations &rarr;
+              </a>
+            </div>
           </div>
         </>
       )}
@@ -2840,6 +2921,16 @@ function AvatarViewerContent() {
       .catch(() => {});
   }, []);
 
+  // Fetch custom animations (Mixamo uploads)
+  useEffect(() => {
+    fetch(`${config.backendUrl}/api/animations?userId=1`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.animations)) setCustomAnims(data.animations);
+      })
+      .catch(() => {});
+  }, []);
+
   // Animation state — start with CDN idle (guaranteed to work)
   const [gender, setGender]           = useState<'male' | 'female'>('male');
   const [animUrl, setAnimUrl]         = useState<string>(CDN_MALE_IDLE);
@@ -2856,6 +2947,13 @@ function AvatarViewerContent() {
 
   // Shadow visibility
   const [showShadow, setShowShadow] = useState(true);
+
+  // Custom animations (Mixamo FBX / GLB uploads)
+  const [customAnims, setCustomAnims] = useState<Array<{
+    id: string; name: string; localPath: string; format: string; category: string;
+  }>>([]);
+  const [animUploadStatus, setAnimUploadStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
+  const animFileInputRef = useRef<HTMLInputElement>(null);
 
   // World bots state
   const [worldBots, setWorldBots] = useState<Array<{
@@ -3479,6 +3577,39 @@ function AvatarViewerContent() {
     addNotif({ type: 'gif', title: title || 'GIF', body: '', from: 'Custom', gifUrl });
     if (notifAutoWeather) applyWeatherPreset('autumn');
   }, [addNotif, notifAutoWeather, applyWeatherPreset]);
+
+  // ── Custom animation upload / delete (Mixamo FBX/GLB) ──
+  const uploadAnimation = useCallback(async (file: File) => {
+    setAnimUploadStatus('uploading');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const cleanName = file.name.replace(/\.(fbx|glb)$/i, '');
+      const res = await fetch(
+        `${config.backendUrl}/api/animations/upload?userId=1&name=${encodeURIComponent(cleanName)}`,
+        { method: 'POST', body: form }
+      );
+      const data = await res.json();
+      if (data.success) {
+        setCustomAnims(prev => [data.animation, ...prev]);
+        setAnimUploadStatus('done');
+        setTimeout(() => setAnimUploadStatus('idle'), 2000);
+      } else {
+        setAnimUploadStatus('error');
+        setTimeout(() => setAnimUploadStatus('idle'), 3000);
+      }
+    } catch {
+      setAnimUploadStatus('error');
+      setTimeout(() => setAnimUploadStatus('idle'), 3000);
+    }
+  }, []);
+
+  const deleteAnimation = useCallback(async (animId: string) => {
+    try {
+      await fetch(`${config.backendUrl}/api/animations/${animId}?userId=1`, { method: 'DELETE' });
+      setCustomAnims(prev => prev.filter(a => a.id !== animId));
+    } catch { /* ignore */ }
+  }, []);
 
   // Update a specific notification by id (for reply, etc.)
   const updateNotif = useCallback((id: string, changes: Partial<Omit<Notif, 'id'>>) => {
@@ -4603,6 +4734,11 @@ function AvatarViewerContent() {
             onSendGif={sendGif}
             showShadow={showShadow}
             onShowShadowChange={setShowShadow}
+            customAnims={customAnims}
+            onUploadAnim={uploadAnimation}
+            onDeleteAnim={deleteAnimation}
+            animUploadStatus={animUploadStatus}
+            animFileInputRef={animFileInputRef}
           />
         )}
       </div>

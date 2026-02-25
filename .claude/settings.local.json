@@ -40,7 +40,12 @@
       "Bash(Remove-Item \"c:\\\\xampp\\\\htdocs\\\\agent_player\\\\packages\\\\backend\\\\src\\\\db\\\\migrations\\\\005_inbox_system.sql\" -Force)",
       "Bash(gemini:*)",
       "Bash(echo \"renamed 037 -> 040\")",
-      "Bash(echo \"renamed 040 -> 041\")"
+      "Bash(echo \"renamed 040 -> 041\")",
+      "Bash(xargs grep -l \"user_avatars\\\\|avatar_settings\")",
+      "Bash(xargs grep -l \"fbx2gltf\\\\|fbx-to-gltf\\\\|three.*FBX\\\\|FBXLoader\")",
+      "Bash(npx next build --no-lint)",
+      "WebFetch(domain:localhost)",
+      "Bash(python -m json.tool)"
     ]
   }
 }

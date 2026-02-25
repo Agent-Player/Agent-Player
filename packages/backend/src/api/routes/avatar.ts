@@ -710,7 +710,7 @@ export async function registerAvatarRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // POST /api/avatars/upload — upload GLB file → save to public/avatars/user/{userId}/{id}/
+  // POST /api/avatars/upload — upload GLB/FBX file → save to public/avatars/user/{userId}/{id}/
   fastify.post<{ Querystring: { userId: string; name?: string } }>('/api/avatars/upload', async (request, reply) => {
     try {
       const { userId, name } = request.query;
@@ -719,10 +719,9 @@ export async function registerAvatarRoutes(fastify: FastifyInstance) {
       const data = await request.file();
       if (!data) return reply.status(400).send({ error: 'No file provided' });
 
-      const allowed = ['model/gltf-binary', 'application/octet-stream', 'model/gltf+json'];
       const ext = path.extname(data.filename || 'avatar.glb').toLowerCase();
-      if (ext !== '.glb' && ext !== '.gltf') {
-        return reply.status(400).send({ error: 'Only .glb or .gltf files are allowed' });
+      if (ext !== '.glb' && ext !== '.gltf' && ext !== '.fbx') {
+        return reply.status(400).send({ error: 'Only .glb, .gltf, or .fbx files are allowed' });
       }
 
       const id = randomBytes(8).toString('hex');
@@ -730,12 +729,12 @@ export async function registerAvatarRoutes(fastify: FastifyInstance) {
       const avatarDir = path.join(projectRoot, 'public', 'storage', 'avatars', 'user', userId, id);
       fs.mkdirSync(avatarDir, { recursive: true });
 
-      const glbFilename = 'avatar' + ext;
-      const glbPath = path.join(avatarDir, glbFilename);
+      const modelFilename = 'avatar' + ext;
+      const modelPath = path.join(avatarDir, modelFilename);
       const buffer = await data.toBuffer();
-      fs.writeFileSync(glbPath, buffer);
+      fs.writeFileSync(modelPath, buffer);
 
-      const localGlbPath = `/storage/avatars/user/${userId}/${id}/${glbFilename}`;
+      const localModelPath = `/storage/avatars/user/${userId}/${id}/${modelFilename}`;
 
       const db = getDatabase();
       // Auto-activate if this is the user's first avatar
@@ -745,7 +744,7 @@ export async function registerAvatarRoutes(fastify: FastifyInstance) {
       db.prepare(`
         INSERT INTO user_avatars (id, user_id, name, source, local_glb_path, is_active)
         VALUES (?, ?, ?, 'upload', ?, ?)
-      `).run(id, userId, name || data.filename || 'Uploaded Avatar', localGlbPath, isActive);
+      `).run(id, userId, name || data.filename || 'Uploaded Avatar', localModelPath, isActive);
 
       const avatar = db.prepare(`
         SELECT id, user_id as userId, name, source, glb_url as glbUrl,
@@ -754,11 +753,10 @@ export async function registerAvatarRoutes(fastify: FastifyInstance) {
         FROM user_avatars WHERE id = ?
       `).get(id);
 
-      fastify.log.info(`[Avatar] GLB uploaded: ${localGlbPath}`);
+      fastify.log.info(`[Avatar] Model uploaded: ${localModelPath}`);
       return reply.send({ success: true, avatar });
     } catch (error: any) {
       fastify.log.error('Avatar upload error:', error);
-      // SECURITY: Use centralized error handler to prevent info disclosure (H-09)
       return handleError(reply, error, 'internal', '[Avatar] Upload failed');
     }
   });
@@ -940,6 +938,124 @@ export async function registerAvatarRoutes(fastify: FastifyInstance) {
   );
 
   // ── End Avatar Collection Routes ────────────────────────────────────────────
+
+  // ── Animation Upload Routes (Custom FBX/GLB animations from Mixamo etc.) ──
+
+  // POST /api/animations/upload — upload FBX/GLB animation file
+  fastify.post<{ Querystring: { userId: string; name?: string; category?: string } }>(
+    '/api/animations/upload',
+    async (request, reply) => {
+      try {
+        const { userId, name, category } = request.query;
+        if (!userId) return reply.status(400).send({ error: 'userId is required' });
+
+        const data = await request.file();
+        if (!data) return reply.status(400).send({ error: 'No file provided' });
+
+        const ext = path.extname(data.filename || 'anim.fbx').toLowerCase();
+        if (ext !== '.glb' && ext !== '.fbx') {
+          return reply.status(400).send({ error: 'Only .glb or .fbx animation files are allowed' });
+        }
+
+        const id = randomBytes(8).toString('hex');
+        const projectRoot = path.join(process.cwd(), '..', '..');
+        const animDir = path.join(projectRoot, 'public', 'storage', 'animations', 'user', userId, id);
+        fs.mkdirSync(animDir, { recursive: true });
+
+        const animFilename = 'anim' + ext;
+        const animPath = path.join(animDir, animFilename);
+        const buffer = await data.toBuffer();
+        fs.writeFileSync(animPath, buffer);
+
+        const localPath = `/storage/animations/user/${userId}/${id}/${animFilename}`;
+        const format = ext === '.fbx' ? 'fbx' : 'glb';
+
+        const db = getDatabase();
+        db.prepare(`
+          INSERT INTO user_animations (id, user_id, name, filename, format, category, local_path, file_size)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id, userId,
+          name || data.filename?.replace(/\.(fbx|glb)$/i, '') || 'Custom Animation',
+          data.filename || animFilename,
+          format,
+          category || 'custom',
+          localPath,
+          buffer.length
+        );
+
+        const animation = db.prepare(`
+          SELECT id, user_id as userId, name, filename, format, category,
+            local_path as localPath, file_size as fileSize, created_at as createdAt
+          FROM user_animations WHERE id = ?
+        `).get(id);
+
+        fastify.log.info(`[Animation] Uploaded: ${localPath} (${format})`);
+        return reply.send({ success: true, animation });
+      } catch (error: any) {
+        fastify.log.error('Animation upload error:', error);
+        return handleError(reply, error, 'internal', '[Animation] Upload failed');
+      }
+    }
+  );
+
+  // GET /api/animations — list user's custom animations
+  fastify.get<{ Querystring: { userId: string } }>('/api/animations', async (request, reply) => {
+    try {
+      const { userId } = request.query;
+      if (!userId) return reply.status(400).send({ error: 'userId is required' });
+
+      const db = getDatabase();
+      const animations = db.prepare(`
+        SELECT id, user_id as userId, name, filename, format, category,
+          local_path as localPath, file_size as fileSize, created_at as createdAt
+        FROM user_animations
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+      `).all(userId);
+
+      return reply.send({ success: true, animations });
+    } catch (error: any) {
+      fastify.log.error('List animations error:', error);
+      return handleError(reply, error, 'internal', '[Animation] List failed');
+    }
+  });
+
+  // DELETE /api/animations/:id — delete custom animation
+  fastify.delete<{ Params: { id: string }; Querystring: { userId: string } }>(
+    '/api/animations/:id',
+    async (request, reply) => {
+      try {
+        const { id } = request.params;
+        const { userId } = request.query;
+        if (!userId) return reply.status(400).send({ error: 'userId is required' });
+
+        const db = getDatabase();
+        const anim = db.prepare(
+          'SELECT local_path as localPath FROM user_animations WHERE id = ? AND user_id = ?'
+        ).get(id, userId) as { localPath: string } | undefined;
+
+        if (!anim) return reply.status(404).send({ error: 'Animation not found' });
+
+        // Delete file from disk
+        const projectRoot = path.join(process.cwd(), '..', '..');
+        const absDir = path.dirname(path.join(projectRoot, 'public', anim.localPath.replace(/^\//, '')));
+        try {
+          if (fs.existsSync(absDir)) fs.rmSync(absDir, { recursive: true, force: true });
+        } catch { /* ignore cleanup errors */ }
+
+        db.prepare('DELETE FROM user_animations WHERE id = ? AND user_id = ?').run(id, userId);
+
+        fastify.log.info(`[Animation] Deleted: ${anim.localPath}`);
+        return reply.send({ success: true });
+      } catch (error: any) {
+        fastify.log.error('Delete animation error:', error);
+        return handleError(reply, error, 'internal', '[Animation] Delete failed');
+      }
+    }
+  );
+
+  // ── End Animation Routes ──────────────────────────────────────────────────
 
   // POST /api/stt — alias for SupportChatBlock (multipart, returns transcript)
   fastify.post('/api/stt', async (request, reply) => {
