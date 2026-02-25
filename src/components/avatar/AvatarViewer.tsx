@@ -414,7 +414,17 @@ function SceneBackground({ scene, avatarY, wallText, wallLogoUrl, wallVideoUrl, 
   if (scene === 'classroom') return (
     <>
       <ClassroomScene y={avatarY} />
-      <WallContent {...wallProps} wallZ={-3.4} boardColor="#1a2820" textColor="#ffffff" />
+      <WallContent
+        {...wallProps}
+        wallZ={-6.2}
+        boardColor="#1a2820"
+        textColor="#ffffff"
+        wallLayout={{
+          text: { x: 5.0, y: 2.7, w: 5.0, h: 2.5 },
+          logo: { x: 5.0, y: 2.7, w: 2.0, h: 2.0 },
+          video: { x: 5.0, y: 2.7, w: 5.0, h: 2.8 }
+        }}
+      />
     </>
   );
 

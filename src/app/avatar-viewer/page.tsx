@@ -3991,6 +3991,27 @@ function AvatarViewerContent() {
           }
         }
 
+        // Extract and render complete ```blackboard blocks (CLASSROOM SCENE ONLY)
+        // Educational feature: Display teaching content on the classroom blackboard
+        {
+          const isClassroomScene = bgScene === 'classroom';
+          if (isClassroomScene) {
+            let bStart: number;
+            while ((bStart = textBuffer.indexOf('```blackboard')) !== -1) {
+              const bEnd = textBuffer.indexOf('```', bStart + 13);
+              if (bEnd === -1 || bEnd === bStart) break;
+
+              const boardContent = textBuffer.slice(bStart + 13, bEnd).trim();
+              textBuffer = textBuffer.slice(0, bStart) + textBuffer.slice(bEnd + 3);
+
+              // Update blackboard text instantly (no need to save settings)
+              setWallText(boardContent);
+              setAppliedWall(prev => ({ ...prev, text: boardContent }));
+              console.log('[Avatar] 🎓 Classroom Blackboard updated:', boardContent.substring(0, 100));
+            }
+          }
+        }
+
         // Strip and fire any complete ```notify blocks from the text buffer
         {
           // Debug: Log buffer content if it contains notify

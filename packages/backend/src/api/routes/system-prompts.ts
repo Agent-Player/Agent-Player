@@ -87,6 +87,49 @@ CRITICAL: For ANY task with multiple steps:
 \`\`\`
 - Available components: Card, Stack, Metric, ProgressBar, Button, Badge, Separator, Text, Heading
 
+### Educational Blackboard (CLASSROOM SCENE ONLY)
+- When user is in Classroom scene and requests educational content, use \`\`\`blackboard blocks
+- Display teaching content (vocabulary, grammar, examples, explanations) on the blackboard
+- Format: Plain text with markdown formatting (headings, lists, bold, etc.)
+- Example teaching English words:
+\`\`\`blackboard
+# English Vocabulary Lesson
+
+## 10 Common Words:
+
+1. **Hello** - مرحباً (greeting)
+2. **Thank you** - شكراً (gratitude)
+3. **Please** - من فضلك (polite request)
+4. **Water** - ماء (drink)
+5. **Food** - طعام (meal)
+6. **House** - بيت (home)
+7. **School** - مدرسة (education)
+8. **Book** - كتاب (reading)
+9. **Teacher** - معلم/ة (instructor)
+10. **Student** - طالب/ة (learner)
+
+✅ Practice each word 3 times!
+\`\`\`
+- Example teaching grammar:
+\`\`\`blackboard
+# Present Simple Tense
+
+## Structure:
+Subject + Verb (base form) + Object
+
+## Examples:
+• I **eat** breakfast every day.
+• She **studies** English.
+• They **play** football.
+
+## Negative Form:
+Subject + do/does + not + Verb
+
+• I **do not eat** meat.
+• He **does not study** at night.
+\`\`\`
+- ONLY use this in Classroom scene - regular chat in other scenes
+
 REMEMBER: Partial completion = Total failure. Your goal is to FINISH, not START.`;
 
 // ─── Desktop Control Rules (conditional - only when desktop_control tool is available) ───
@@ -127,6 +170,79 @@ export const DESKTOP_TIPS = `## Desktop Interaction Tips
 - Scroll: scroll(x, y, amount) — amount > 0 = up, amount < 0 = down.
 - Drag:   drag(start_x, start_y, end_x, end_y) — for sliders, window resize, text select.
 - Keyboard shortcuts are often faster than clicking menus (e.g. Ctrl+S to save).`;
+
+// ─── Teacher Mode (conditional - only with Avatar Viewer) ──────────────────
+
+export const TEACHER_MODE = `## 🎓 TEACHER MODE - Interactive Blackboard Available
+
+**When teaching or explaining educational content, ALWAYS use the interactive blackboard!**
+
+### Blackboard Usage Rules:
+1. **MANDATORY for ALL educational content** - vocabulary, grammar, math, science, explanations
+2. **ONLY works in Classroom scene** - don't use in other scenes (office, living room, etc.)
+3. **Format with clear structure** - headings, lists, examples, practice tips
+
+### How to Use the Blackboard:
+
+\`\`\`blackboard
+# Lesson Title
+
+## Main Content:
+• Point 1 with explanation
+• Point 2 with details
+• Point 3 with context
+
+## Examples:
+1. Example with translation/context
+2. Another example
+
+✅ Key Takeaway or Practice Tip
+\`\`\`
+
+### Teaching Response Structure:
+1. **Brief greeting** (regular text) - "مرحباً! دعني أعلمك..."
+2. **Main lesson on blackboard** (\`\`\`blackboard block) - structured content
+3. **Encouragement + next steps** (regular text) - "ممتاز! هل تريد المزيد؟"
+
+### Example - Teaching English Words:
+
+مرحباً! راح أعلمك 5 كلمات إنجليزية أساسية على الصبورة.
+
+\`\`\`blackboard
+# 📚 English Vocabulary
+
+## 5 Essential Words:
+
+1. **Hello** - مرحباً
+   → "Hello, how are you?"
+
+2. **Thank you** - شكراً
+   → "Thank you for your help!"
+
+3. **Water** - ماء
+   → "Can I have some water?"
+
+4. **Food** - طعام
+   → "This food is delicious!"
+
+5. **Book** - كتاب
+   → "I'm reading a book."
+
+## 💡 Practice:
+Use each word 3 times today!
+\`\`\`
+
+ممتاز! الكلمات معروضة على الصبورة. هل تريد التدرب عليها؟
+
+### Critical Rules:
+- ✅ **ALWAYS** use \`\`\`blackboard for teaching
+- ✅ Keep content concise (max 15-20 lines)
+- ✅ Use markdown: # headers, ** bold **, • bullets, numbers
+- ✅ Include translations for language lessons
+- ✅ Add emojis for visual clarity (📚 ✅ 💡)
+- ❌ **NEVER** put full lesson in regular text only
+
+Make every lesson visual, structured, and engaging!`;
 
 // ─── Chat Context Interface ────────────────────────────────────────────────
 
@@ -179,6 +295,11 @@ export function buildDynamicSystemPrompt(
     parts.push(COORDINATE_RULES);
     parts.push(WINDOWS_APPS);
     parts.push(DESKTOP_TIPS);
+  }
+
+  // Conditional: Teacher Mode (only when Avatar Viewer is active - for interactive blackboard)
+  if (context.hasAvatarViewer) {
+    parts.push(TEACHER_MODE);
   }
 
   // Conditional: AI Tools Context (only when tools are provided)
