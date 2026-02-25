@@ -67,26 +67,44 @@ export default function SkillsPage() {
 
   const installSkill = async (skill: MarketplaceSkill) => {
     try {
+      console.log('Installing skill:', { name: skill.name, path: skill.path });
+
       const res = await fetch(`${BACKEND_URL}/api/skills/marketplace/install`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skillName: skill.name, skillPath: skill.path }),
       });
+
       const data = await res.json();
+      console.log('Install response:', data);
+
       if (data.success) {
-        toast.success(`Skill "${skill.name}" installed to local storage!`);
-        fetchAvailableSkills();
+        toast.success(`Skill "${skill.name}" installed successfully!`);
+        // Refresh both local and marketplace lists
+        await fetchLocalSkills();
+        await fetchAvailableSkills();
       } else {
-        throw new Error(data.error);
+        const errorMsg = data.error || 'Unknown error occurred';
+        console.error('Install failed:', errorMsg);
+        toast.error(`Failed to install: ${errorMsg}`);
       }
     } catch (error: any) {
-      toast.error('Failed to install skill');
+      console.error('Install error:', error);
+      toast.error(`Failed to install skill: ${error.message || 'Network error'}`);
     }
   };
 
+  // Load local skills on mount
   useEffect(() => {
     fetchLocalSkills();
   }, []);
+
+  // Auto-load marketplace skills when switching to marketplace tab
+  useEffect(() => {
+    if (activeTab === 'marketplace' && availableSkills.length === 0 && !loading) {
+      fetchAvailableSkills();
+    }
+  }, [activeTab]);
 
   const filteredLocal = (localSkills || []).filter((s) =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

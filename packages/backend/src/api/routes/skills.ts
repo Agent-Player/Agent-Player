@@ -297,12 +297,17 @@ export async function skillsRoutes(fastify: FastifyInstance) {
   // GET /api/skills/marketplace/available - Fetch available skills from Anthropic
   fastify.get('/api/skills/marketplace/available', async (request, reply) => {
     try {
+      console.log('[Skills Marketplace] 📥 Fetching available skills from Anthropic...');
       const skills = await anthropicSkillsService.fetchAvailableSkills();
+      console.log(`[Skills Marketplace] ✅ Fetched ${skills.length} skills`);
 
       return { success: true, skills, count: skills.length };
     } catch (error: any) {
       console.error('[Skills Marketplace] ❌ Fetch available failed:', error);
-      return handleError(reply, error, 'internal', '[Skills Marketplace] Fetch available failed');
+      return reply.status(500).send({
+        success: false,
+        error: error.message || 'Failed to fetch skills',
+      });
     }
   });
 
@@ -330,7 +335,10 @@ export async function skillsRoutes(fastify: FastifyInstance) {
       try {
         const { skillName, skillPath } = request.body;
 
+        console.log('[Skills Marketplace] 📥 Install request:', { skillName, skillPath });
+
         if (!skillName || !skillPath) {
+          console.error('[Skills Marketplace] ❌ Missing parameters:', { skillName, skillPath });
           return reply.status(400).send({
             success: false,
             error: 'skillName and skillPath are required',
@@ -339,6 +347,8 @@ export async function skillsRoutes(fastify: FastifyInstance) {
 
         const localPath = await anthropicSkillsService.installSkill(skillName, skillPath);
 
+        console.log('[Skills Marketplace] ✅ Skill installed:', { skillName, localPath });
+
         return {
           success: true,
           message: `Skill "${skillName}" installed successfully`,
@@ -346,7 +356,11 @@ export async function skillsRoutes(fastify: FastifyInstance) {
         };
       } catch (error: any) {
         console.error('[Skills Marketplace] ❌ Install failed:', error);
-        return handleError(reply, error, 'internal', '[Skills Marketplace] Install failed');
+        // Return detailed error to frontend
+        return reply.status(500).send({
+          success: false,
+          error: error.message || 'Installation failed',
+        });
       }
     }
   );

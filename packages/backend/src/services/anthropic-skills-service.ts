@@ -35,8 +35,19 @@ export class AnthropicSkillsService {
   private octokit: Octokit;
 
   constructor() {
-    // GitHub API client (no auth needed for public repos)
-    this.octokit = new Octokit();
+    const githubToken = process.env.GITHUB_TOKEN;
+
+    this.octokit = new Octokit({
+      auth: githubToken,
+      // Using token increases rate limit from 60/hour to 5000/hour
+    });
+
+    if (!githubToken) {
+      console.warn('⚠️  GITHUB_TOKEN not found. Rate limit: 60 requests/hour.');
+      console.warn('ℹ️  Add GITHUB_TOKEN to .env for 5000 requests/hour.');
+    } else {
+      console.log('✅ GitHub authenticated. Rate limit: 5000 requests/hour.');
+    }
   }
 
   /**
@@ -66,8 +77,22 @@ export class AnthropicSkillsService {
       }
 
       return skills;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching Anthropic skills:', error);
+
+      // Check if it's a rate limit error
+      if (error.status === 403 && error.message?.includes('rate limit')) {
+        const resetTime = error.response?.headers?.['x-ratelimit-reset'];
+        const resetDate = resetTime ? new Date(resetTime * 1000) : null;
+        const waitMinutes = resetDate
+          ? Math.ceil((resetDate.getTime() - Date.now()) / 60000)
+          : 'unknown';
+
+        throw new Error(
+          `GitHub API rate limit exceeded. Please add GITHUB_TOKEN to .env or wait ${waitMinutes} minutes.`
+        );
+      }
+
       throw new Error('Failed to fetch skills from Anthropic repository');
     }
   }
@@ -91,13 +116,20 @@ export class AnthropicSkillsService {
 
       for (const item of categoryContents) {
         if (item.type === 'dir') {
-          // Each subfolder is a skill
-          skills.push({
-            name: item.name,
-            path: item.path,
-            category: this.normalizeCategoryName(categoryName),
-            sha: item.sha,
-          });
+          // Check if this directory contains SKILL.md
+          const hasSkillFile = await this.checkForSkillFile(item.path);
+
+          if (hasSkillFile) {
+            // Use formatted folder name for display
+            const displayName = this.formatSkillName(categoryName, item.name);
+
+            skills.push({
+              name: displayName,
+              path: item.path,
+              category: this.normalizeCategoryName(categoryName),
+              sha: item.sha,
+            });
+          }
         }
       }
     } catch (error) {
@@ -105,6 +137,35 @@ export class AnthropicSkillsService {
     }
 
     return skills;
+  }
+
+  /**
+   * Check if a directory contains SKILL.md
+   */
+  private async checkForSkillFile(skillPath: string): Promise<boolean> {
+    try {
+      await this.octokit.repos.getContent({
+        owner: ANTHROPIC_REPO_OWNER,
+        repo: ANTHROPIC_REPO_NAME,
+        path: `${skillPath}/SKILL.md`,
+      });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Format skill name from category and folder name
+   */
+  private formatSkillName(category: string, folderName: string): string {
+    // Convert kebab-case to Title Case
+    const formatted = folderName
+      .split('-')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+
+    return formatted;
   }
 
   /**
@@ -172,11 +233,17 @@ export class AnthropicSkillsService {
     const db = getDatabase();
 
     try {
+      console.log(`[AnthropicSkills] 📦 Installing skill: ${skillName} from path: ${skillPath}`);
+
       // 1. Fetch skill content from GitHub
+      console.log(`[AnthropicSkills] 📥 Fetching content from GitHub...`);
       const content = await this.fetchSkillContent(skillPath);
+      console.log(`[AnthropicSkills] ✅ Content fetched, size: ${content.length} bytes`);
 
       // 2. Parse metadata
+      console.log(`[AnthropicSkills] 📋 Parsing metadata...`);
       const metadata = this.parseSkillMetadata(content);
+      console.log(`[AnthropicSkills] ✅ Metadata parsed:`, metadata);
 
       // 3. Ensure local skills directory exists
       await fs.mkdir(LOCAL_SKILLS_DIR, { recursive: true });
@@ -185,6 +252,7 @@ export class AnthropicSkillsService {
       const fileName = `${skillName}.md`;
       const localPath = path.join(LOCAL_SKILLS_DIR, fileName);
       await fs.writeFile(localPath, content, 'utf-8');
+      console.log(`[AnthropicSkills] ✅ File saved to: ${localPath}`);
 
       // 5. Get Anthropic source ID
       const source = db.prepare(`
@@ -194,9 +262,11 @@ export class AnthropicSkillsService {
       if (!source) {
         throw new Error('Anthropic source not found in database');
       }
+      console.log(`[AnthropicSkills] ✅ Source ID: ${source.id}`);
 
       // 6. Insert into database
       const category = this.extractCategoryFromPath(skillPath);
+      console.log(`[AnthropicSkills] 💾 Saving to database with category: ${category}`);
 
       db.prepare(`
         INSERT INTO installed_skills (
@@ -218,9 +288,10 @@ export class AnthropicSkillsService {
         JSON.stringify(metadata)
       );
 
+      console.log(`[AnthropicSkills] ✅ Skill installed successfully!`);
       return localPath;
     } catch (error) {
-      console.error(`Error installing skill ${skillName}:`, error);
+      console.error(`[AnthropicSkills] ❌ Error installing skill ${skillName}:`, error);
       throw error;
     }
   }

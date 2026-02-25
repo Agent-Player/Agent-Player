@@ -4,8 +4,48 @@
 
 تم تنفيذ نظام متكامل لسوق Claude Skills يسمح للمستخدمين بتصفح وتثبيت المهارات من مستودع Anthropic الرسمي على GitHub.
 
-**التاريخ**: 2026-02-24
-**الحالة**: ⚠️ غير مكتمل - يوجد خطأ 404 في marketplace API endpoints
+**التاريخ**: 2026-02-25
+**الحالة**: ✅ جاهز للاختبار - تم إضافة console logging شامل
+**آخر تحديث**: 2026-02-25 (إصلاح auto-load + error handling)
+
+---
+
+## 🔥 آخر التحديثات (2026-02-25)
+
+### الإصلاحات المُضافة:
+
+1. **✅ Auto-Load عند فتح Marketplace**
+   - إضافة `useEffect` جديد يراقب `activeTab`
+   - تحميل تلقائي للمهارات عند فتح تاب Marketplace لأول مرة
+   - لا حاجة للضغط على Refresh يدوياً
+
+2. **✅ عرض الأخطاء الحقيقية**
+   - تعديل `toast.error()` لعرض رسالة الخطأ الفعلية من السيرفر
+   - إضافة `console.log` شاملة للتتبع في الفرونت اند
+   - تحسين error handling في الباك اند
+
+3. **✅ تحديث Local Skills بعد التثبيت**
+   - استدعاء `fetchLocalSkills()` بعد التثبيت الناجح
+   - تحديث تلقائي لقائمة Marketplace أيضاً
+
+4. **✅ Console Logging شامل**
+   - **Frontend** (`page.tsx`):
+     - `console.log('Installing skill:', { name, path })`
+     - `console.log('Install response:', data)`
+   - **Backend API** (`skills.ts`):
+     - `[Skills Marketplace] 📥 Install request`
+     - `[Skills Marketplace] ✅ Skill installed`
+   - **Backend Service** (`anthropic-skills-service.ts`):
+     - `[AnthropicSkills] 📦 Installing skill`
+     - `[AnthropicSkills] 📥 Fetching content`
+     - `[AnthropicSkills] ✅ Content fetched`
+     - `[AnthropicSkills] 📋 Parsing metadata`
+     - `[AnthropicSkills] ✅ File saved`
+     - `[AnthropicSkills] 💾 Saving to database`
+
+5. **✅ تحسين Error Response**
+   - تغيير `handleError()` إلى `reply.status(500).send({ error })`
+   - إرجاع `error.message` بدلاً من رسالة عامة
 
 ---
 
@@ -282,6 +322,84 @@ const nextConfig: NextConfig = {
 
 ---
 
+## 🐛 كيفية اختبار وإصلاح خطأ التثبيت
+
+### الخطوة 1: افتح Developer Console
+
+في المتصفح اضغط `F12` وافتح تاب **Console**
+
+### الخطوة 2: جرب تثبيت مهارة
+
+1. اذهب إلى: http://localhost:41521/dashboard/skills
+2. اختر تاب **Marketplace**
+3. اختر أي مهارة واضغط **Install**
+
+### الخطوة 3: راقب Console Logs
+
+**في الفرونت اند (Browser Console)** ستظهر:
+```
+Installing skill: { name: "pdf", path: "skills/Document Skills/pdf" }
+Install response: { success: true, localPath: "..." }
+```
+
+**في الباك اند (Terminal)** ستظهر:
+```
+[Skills Marketplace] 📥 Install request: { skillName: 'pdf', skillPath: 'skills/...' }
+[AnthropicSkills] 📦 Installing skill: pdf from path: skills/Document Skills/pdf
+[AnthropicSkills] 📥 Fetching content from GitHub...
+[AnthropicSkills] ✅ Content fetched, size: 1234 bytes
+[AnthropicSkills] 📋 Parsing metadata...
+[AnthropicSkills] ✅ Metadata parsed: { name: 'PDF Extractor', description: '...' }
+[AnthropicSkills] ✅ File saved to: C:\MAMP\htdocs\agent\agent_player\.data\skills\pdf.md
+[AnthropicSkills] ✅ Source ID: anthropic-official
+[AnthropicSkills] 💾 Saving to database with category: Document Skills
+[AnthropicSkills] ✅ Skill installed successfully!
+[Skills Marketplace] ✅ Skill installed: { skillName: 'pdf', localPath: '...' }
+```
+
+### الخطوة 4: فحص الأخطاء المحتملة
+
+إذا فشل التثبيت، ستظهر في Console:
+
+#### ❌ خطأ 1: Missing skillPath
+```
+[Skills Marketplace] ❌ Missing parameters: { skillName: 'pdf', skillPath: undefined }
+toast.error: "Failed to install: skillName and skillPath are required"
+```
+**الحل**: تأكد أن `skill.path` موجود في البيانات
+
+#### ❌ خطأ 2: GitHub API Error
+```
+[AnthropicSkills] ❌ Error fetching skill content for skills/xxx/xxx
+toast.error: "Failed to install skill: Failed to fetch skill content"
+```
+**الحل**: تحقق من اتصال الإنترنت أو رابط GitHub
+
+#### ❌ خطأ 3: Database Error
+```
+[AnthropicSkills] ❌ Error installing skill pdf: Error: Anthropic source not found in database
+toast.error: "Failed to install: Anthropic source not found in database"
+```
+**الحل**: تأكد أن migration 040 طُبِّق بنجاح وأن الجدول `skill_sources` يحتوي على السجل
+
+#### ❌ خطأ 4: File System Error
+```
+[AnthropicSkills] ❌ Error installing skill pdf: EACCES: permission denied
+toast.error: "Failed to install skill: permission denied"
+```
+**الحل**: تحقق من صلاحيات الكتابة على مجلد `.data/skills/`
+
+### الخطوة 5: التحقق من نجاح التثبيت
+
+بعد التثبيت الناجح:
+1. ✅ ستظهر toast خضراء: "Skill 'pdf' installed successfully!"
+2. ✅ سيتم تحديث قائمة Local Skills تلقائياً
+3. ✅ سيتم تحديث قائمة Marketplace
+4. ✅ ملف جديد في: `.data/skills/pdf.md`
+5. ✅ سجل جديد في جدول `installed_skills`
+
+---
+
 ## 📁 هيكل الملفات المتأثرة
 
 ```
@@ -418,6 +536,125 @@ http://localhost:41521/dashboard/skills
 
 ---
 
-**تم التوثيق بتاريخ**: 2026-02-24
-**الحالة**: في انتظار إصلاح API Proxy
-**التقدم**: 85% (الباك اند مكتمل، الفرونت اند يحتاج proxy فقط)
+## 📋 خطوات الاستخدام (للمستخدم النهائي)
+
+### 1. تصفح المهارات المحلية
+
+1. اذهب إلى: http://localhost:41521/dashboard/skills
+2. ستظهر لك تبويبتين: **Local Skills** و **Marketplace**
+3. في تاب Local Skills ستجد المهارات الموجودة في workspace (8 مهارات)
+
+### 2. تصفح Marketplace
+
+1. اضغط على تاب **Marketplace**
+2. سيتم تحميل المهارات من Anthropic **تلقائياً** (16 مهارة)
+3. يمكنك الضغط على **Refresh** لتحديث القائمة يدوياً
+
+### 3. البحث عن مهارة
+
+1. استخدم حقل البحث في الأعلى
+2. ابحث بـ: اسم المهارة أو الوصف
+3. البحث يعمل على كلا التبويبتين
+
+### 4. تثبيت مهارة من Marketplace
+
+1. اختر المهارة التي تريدها
+2. اقرأ الوصف والفئة (Category)
+3. اضغط على زر **Install**
+4. ستظهر رسالة نجاح أو خطأ
+5. إذا نجح التثبيت، ستظهر المهارة في تاب **Local Skills**
+
+### 5. استخدام المهارة مع AI
+
+بعد التثبيت، يمكنك استخدام المهارة مع الـ AI:
+
+**مثال**:
+```
+User: "Use the pdf skill to extract text from my document"
+AI: [يستخدم المهارة المثبتة تلقائياً]
+```
+
+أو استخدام الأداة `skill_install`:
+```
+User: "Search for image generation skills and install one"
+AI: [يبحث ويثبت المهارة تلقائياً]
+```
+
+---
+
+## 🔍 استكشاف الأخطاء (Troubleshooting)
+
+### المشكلة: Local Skills تظهر (0)
+
+**الحل**:
+1. تحقق أن Backend يعمل على port 41522
+2. افتح: http://localhost:41522/api/skills
+3. إذا ظهرت البيانات، المشكلة في Frontend
+4. حدث الصفحة بـ Ctrl+Shift+R
+
+### المشكلة: Marketplace لا يحمل المهارات
+
+**الحل**:
+1. افتح Developer Console (F12)
+2. اذهب إلى تاب **Network**
+3. اضغط Refresh في Marketplace
+4. ابحث عن طلب: `marketplace/available`
+5. افحص الـ Response - إذا كان 404، Backend غير متصل
+
+### المشكلة: "Failed to install skill"
+
+**الحل**:
+1. افتح Developer Console (F12)
+2. انظر للرسالة الكاملة في Console
+3. راجع قسم "🐛 كيفية اختبار وإصلاح خطأ التثبيت" أعلاه
+4. تحقق من Backend logs في Terminal
+
+### المشكلة: المهارة مثبتة لكن لا تظهر في Local Skills
+
+**الحل**:
+1. تحقق من مجلد: `.data/skills/`
+2. افحص قاعدة البيانات: `installed_skills` table
+3. أعد تشغيل Backend:
+   ```bash
+   cd packages/backend
+   pnpm dev
+   ```
+
+---
+
+## 🎯 الخطوات القادمة (اختياري)
+
+### تحسينات مقترحة:
+
+1. **Modal للتفاصيل**
+   - عرض محتوى SKILL.md كاملاً قبل التثبيت
+   - معاينة الـ triggers والأمثلة
+
+2. **نظام التقييم**
+   - إضافة نجوم/تقييمات للمهارات
+   - عرض عدد مرات التثبيت
+
+3. **Tags/Filters**
+   - فلترة حسب الفئة (Category)
+   - فلترة حسب Tags
+   - ترتيب (الأحدث، الأكثر استخداماً)
+
+4. **دعم مصادر إضافية**
+   - تفعيل LobeHub source
+   - تفعيل SkillsMP source
+   - إضافة Custom Sources
+
+5. **نظام التحديثات**
+   - فحص وجود تحديثات للمهارات المثبتة
+   - زر "Update All"
+
+6. **Bulk Operations**
+   - تثبيت عدة مهارات دفعة واحدة
+   - حذف عدة مهارات
+
+---
+
+**تم التوثيق بتاريخ**: 2026-02-25
+**آخر تحديث**: 2026-02-25 (إضافة console logging + auto-load + error handling)
+**الحالة**: ✅ جاهز للاختبار
+**التقدم**: 95% (يحتاج اختبار فعلي لتثبيت مهارة حقيقية)
