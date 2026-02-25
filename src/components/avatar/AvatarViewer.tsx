@@ -668,16 +668,19 @@ interface AvatarModelCoreProps extends Omit<AvatarModelProps, 'url' | 'animation
 
 function AvatarModelCore({ loadedScene, rawAnims, isPlaying, audioAnalyser, avatarY, stripRootMotion, facialExpression, lipsyncCues, audioEl, avatarRef: externalAvatarRef, isFbx, isAnimFbx }: AvatarModelCoreProps) {
   // Compute the right display scale: FBX in centimeters needs 0.01 factor
-  const primitiveScale = useMemo(() => {
+  // Also capture FBX rest-pose hip height for proportional animation scaling
+  const { primitiveScale, fbxHipRestY } = useMemo(() => {
     if (isFbx) {
       const bbox = new THREE.Box3().setFromObject(loadedScene);
       const height = bbox.max.y - bbox.min.y;
       if (height > 50) {
-        // FBX in centimeters: scale 0.01 (→ meters) × 1.8 (display scale)
-        return 0.01 * 1.8;
+        const s = 0.01 * 1.8; // FBX cm → meters × display scale
+        // Capture Hips rest-pose Y before animation overrides it
+        const hips = loadedScene.getObjectByName('Hips');
+        return { primitiveScale: s, fbxHipRestY: hips ? hips.position.y : 96 };
       }
     }
-    return 1.8;
+    return { primitiveScale: 1.8, fbxHipRestY: 0 };
   }, [loadedScene, isFbx]);
 
   const cloned = useMemo(() => {
@@ -707,17 +710,23 @@ function AvatarModelCore({ loadedScene, rawAnims, isPlaying, audioAnalyser, avat
         return track;
       });
       // Cross-format: GLB animation (meters) on FBX model (centimeters)
-      // Only scale the root bone (Hips) position ×100 — it controls character placement.
-      // Strip all other position tracks so the FBX skeleton's own proportions hold;
-      // rotations (quaternions) are scale-independent and drive the pose correctly.
+      // Only keep the root bone (Hips) position — strip all other position tracks
+      // so the FBX skeleton's own proportions hold. Rotations are scale-independent.
       if (isFbx && !isAnimFbx) {
         c.tracks = c.tracks.filter((track: THREE.KeyframeTrack) => {
           if (!track.name.endsWith('.position')) return true; // keep rotations & scale
           if (track.name === 'Hips.position') {
-            // Scale root position: meters → centimeters
+            // Scale XZ by 100 (meters → cm). For Y, use a proportional ratio
+            // based on the FBX skeleton's actual hip height so feet stay grounded.
             const values = track.values;
-            for (let i = 0; i < values.length; i++) {
-              values[i] *= 100;
+            const glbHipY = values[1]; // Y of first keyframe (meters)
+            const scaleY = (glbHipY > 0.01 && fbxHipRestY > 0)
+              ? fbxHipRestY / glbHipY   // match FBX skeleton proportions
+              : 100;                     // fallback: flat ×100
+            for (let i = 0; i < values.length; i += 3) {
+              values[i]     *= 100;    // X: meters → cm
+              values[i + 1] *= scaleY; // Y: proportional to FBX hip height
+              values[i + 2] *= 100;    // Z: meters → cm
             }
             return true;
           }
@@ -735,7 +744,7 @@ function AvatarModelCore({ loadedScene, rawAnims, isPlaying, audioAnalyser, avat
       });
     }
     return clips;
-  }, [rawAnims, stripRootMotion, isFbx, isAnimFbx]);
+  }, [rawAnims, stripRootMotion, isFbx, isAnimFbx, fbxHipRestY]);
 
   const internalGroupRef = useRef<THREE.Group>(null);
   const groupRef = externalAvatarRef || internalGroupRef;
