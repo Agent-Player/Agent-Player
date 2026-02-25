@@ -530,6 +530,7 @@ const BONES = {
   hips:     'Hips',
   leftArm:  'LeftArm',
   rightArm: 'RightArm',
+  jaw:      'Jaw',
 };
 
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
@@ -749,6 +750,7 @@ function AvatarModelCore({ loadedScene, rawAnims, isPlaying, audioAnalyser, avat
   const internalGroupRef = useRef<THREE.Group>(null);
   const groupRef = externalAvatarRef || internalGroupRef;
   const morphMeshes = useMemo(() => collectMorphMeshes(cloned), [cloned]);
+  const hasMorphTargets = morphMeshes.length > 0;
   const bones       = useRef<Record<string, THREE.Object3D | undefined>>({});
 
   const mixerRef      = useRef<THREE.AnimationMixer | null>(null);
@@ -832,32 +834,46 @@ function AvatarModelCore({ loadedScene, rawAnims, isPlaying, audioAnalyser, avat
     const te = talkEnergy.current;
     const bl = bodyLean.current;
 
-    // ── Rhubarb lipsync visemes (if cues provided, override generic jaw) ─────
-    if (lipsyncCues && lipsyncCues.length > 0 && isPlaying && audioEl) {
-      const elapsed = audioEl.currentTime; // exact playback position — no drift
-      // Find active cue
-      const activeCue = lipsyncCues.find(c => elapsed >= c.start && elapsed < c.end);
-      const targetViseme = activeCue ? (RHUBARB_TO_VISEME[activeCue.value] ?? 'viseme_sil') : 'viseme_sil';
+    // ── Lip sync: morph targets (RPM/GLB) or jaw bone fallback (Mixamo/FBX) ──
+    if (hasMorphTargets) {
+      // Morph-target–based lip sync (RPM GLB models with blend shapes)
+      if (lipsyncCues && lipsyncCues.length > 0 && isPlaying && audioEl) {
+        const elapsed = audioEl.currentTime;
+        const activeCue = lipsyncCues.find(c => elapsed >= c.start && elapsed < c.end);
+        const targetViseme = activeCue ? (RHUBARB_TO_VISEME[activeCue.value] ?? 'viseme_sil') : 'viseme_sil';
 
-      // Lerp all viseme morphs: target=1 for active, 0 for rest
-      const allVisemes = ['viseme_sil','viseme_PP','viseme_kk','viseme_I','viseme_AA','viseme_O','viseme_U','viseme_FF','viseme_TH','viseme_DD','viseme_RR','viseme_CH','viseme_SS','viseme_nn','viseme_E'];
-      for (const v of allVisemes) {
-        const cur = visemeSmooth.current[v] ?? 0;
-        const tgt = v === targetViseme ? 1 : 0;
-        visemeSmooth.current[v] = lerp(cur, tgt, delta * 20);
-        setMorph(morphMeshes, MORPH[v as keyof typeof MORPH] ?? v, visemeSmooth.current[v]);
+        const allVisemes = ['viseme_sil','viseme_PP','viseme_kk','viseme_I','viseme_AA','viseme_O','viseme_U','viseme_FF','viseme_TH','viseme_DD','viseme_RR','viseme_CH','viseme_SS','viseme_nn','viseme_E'];
+        for (const v of allVisemes) {
+          const cur = visemeSmooth.current[v] ?? 0;
+          const tgt = v === targetViseme ? 1 : 0;
+          visemeSmooth.current[v] = lerp(cur, tgt, delta * 20);
+          setMorph(morphMeshes, MORPH[v as keyof typeof MORPH] ?? v, visemeSmooth.current[v]);
+        }
+        setMorph(morphMeshes, MORPH.jawOpen, (visemeSmooth.current['viseme_AA'] ?? 0) * 0.8);
+      } else {
+        setMorph(morphMeshes, MORPH.jawOpen,          ms * 0.72);
+        setMorph(morphMeshes, MORPH.mouthSmileLeft,   isPlaying ? ms * 0.22 : 0);
+        setMorph(morphMeshes, MORPH.mouthSmileRight,  isPlaying ? ms * 0.22 : 0);
+        setMorph(morphMeshes, MORPH.browInnerUp,      te * (0.12 + ms * 0.2));
+        setMorph(morphMeshes, MORPH.browOuterUpLeft,  te * ms * 0.15);
+        setMorph(morphMeshes, MORPH.browOuterUpRight, te * ms * 0.15);
+        setMorph(morphMeshes, MORPH.cheekPuff,        ms * 0.05);
       }
-      // Override jawOpen with AA viseme
-      setMorph(morphMeshes, MORPH.jawOpen, (visemeSmooth.current['viseme_AA'] ?? 0) * 0.8);
     } else {
-      // ── Generic audio-driven lip sync (no Rhubarb) ─────────────────────────
-      setMorph(morphMeshes, MORPH.jawOpen,          ms * 0.72);
-      setMorph(morphMeshes, MORPH.mouthSmileLeft,   isPlaying ? ms * 0.22 : 0);
-      setMorph(morphMeshes, MORPH.mouthSmileRight,  isPlaying ? ms * 0.22 : 0);
-      setMorph(morphMeshes, MORPH.browInnerUp,      te * (0.12 + ms * 0.2));
-      setMorph(morphMeshes, MORPH.browOuterUpLeft,  te * ms * 0.15);
-      setMorph(morphMeshes, MORPH.browOuterUpRight, te * ms * 0.15);
-      setMorph(morphMeshes, MORPH.cheekPuff,        ms * 0.05);
+      // Bone-based fallback (Mixamo FBX models without morph targets)
+      const jawBone = bones.current['jaw'];
+      const headBone = bones.current['head'];
+      if (jawBone) {
+        // Rotate jaw open/close based on audio level
+        const jawTarget = ms * 0.25; // ~15° max opening
+        jawBone.rotation.x = lerp(jawBone.rotation.x, jawTarget, delta * 16);
+      } else if (headBone && isPlaying) {
+        // No jaw bone: subtle head micro-movements to indicate speech
+        const speechNod = ms * 0.03;  // subtle nod with audio
+        const speechTilt = Math.sin(t * 7.3) * ms * 0.015; // slight side tilt
+        headBone.rotation.x = lerp(headBone.rotation.x, speechNod, delta * 10);
+        headBone.rotation.z = lerp(headBone.rotation.z, speechTilt, delta * 10);
+      }
     }
 
     // ── Facial expression blending (additive on top of lip sync) ─────────────
@@ -1110,6 +1126,7 @@ export function AvatarViewer({
   const activeAnimUrl  = animationUrl || defaultAnimUrl;
 
   // Connect audio → Web Audio API for lip sync
+  const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   useEffect(() => {
     if (!audioElement) return;
     if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
@@ -1119,16 +1136,28 @@ export function AvatarViewer({
     ctx.resume().catch(() => {});
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
-    try {
-      const src = ctx.createMediaElementSource(audioElement);
-      src.connect(analyser);
-      analyser.connect(ctx.destination);
-      setAudioAnalyser(analyser);
-    } catch {
-      // Element already connected — analyser won't get audio data,
-      // but procedural fallback in useFrame will handle lip movement
-      setAudioAnalyser(analyser);
+    // Reuse existing MediaElementSource if the element was already connected
+    // (React StrictMode double-mount, or HMR re-render)
+    if (!mediaSourceRef.current) {
+      try {
+        mediaSourceRef.current = ctx.createMediaElementSource(audioElement);
+      } catch {
+        // Element already connected by a previous context — analyser gets no data,
+        // but procedural fallback in useFrame will simulate lip movement
+      }
     }
+    if (mediaSourceRef.current) {
+      mediaSourceRef.current.connect(analyser);
+      analyser.connect(ctx.destination);
+    }
+    setAudioAnalyser(analyser);
+    return () => {
+      // Disconnect analyser on cleanup (but keep the MediaElementSource alive)
+      try { analyser.disconnect(); } catch {}
+      if (mediaSourceRef.current) {
+        try { mediaSourceRef.current.disconnect(); } catch {}
+      }
+    };
   }, [audioElement]);
 
   useEffect(() => {
