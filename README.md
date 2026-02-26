@@ -2,21 +2,29 @@
 
 <div align="center">
 
-### 🚀 **The New Generation of AI Agent Platforms** 🚀
+### 🚀 **The Agent Framework for the Community** 🚀
+
+**The New Generation AI Agent Platform & Framework**
 
 **Work WITH AI, not replaced by it.**
 
+![Version](https://img.shields.io/badge/Version-1.3.0%20Beta-yellow?style=for-the-badge)
 ![Free Forever](https://img.shields.io/badge/💰-100%25%20FREE%20Forever-brightgreen?style=for-the-badge)
 ![Open Source](https://img.shields.io/badge/📖-Open%20Source-blue?style=for-the-badge)
+![Agent Framework](https://img.shields.io/badge/🔧-Agent%20Framework-purple?style=for-the-badge)
+![Cross-Platform](https://img.shields.io/badge/🌐-Windows%20%7C%20macOS%20%7C%20Linux-cyan?style=for-the-badge)
 ![For Everyone](https://img.shields.io/badge/👥-For%20Developers%20%26%20Non--Developers-orange?style=for-the-badge)
+![Community Built](https://img.shields.io/badge/🌍-Built%20for%20Community-red?style=for-the-badge)
 
 </div>
 
 ---
 
-A comprehensive AI Agent platform with **3D avatars**, **interactive worlds**, and **extensible plugin system**. Your personal AI companion that appears **everywhere** - phone, computer, TV - with **live interactive notifications** and real-time collaboration.
+A comprehensive AI Agent **platform & framework** with **3D avatars**, **interactive worlds**, and **extensible plugin system**. Your personal AI companion that appears **everywhere** - phone, computer, TV - with **live interactive notifications** and real-time collaboration.
 
-**Connect through:** Discord, WhatsApp, Telegram, Slack, Phone apps, or Web
+**🌍 Cross-Platform:** Windows, macOS, Linux, Server (AWS, Azure, GCP, Docker)
+
+**🔗 Connect through:** Discord, WhatsApp, Telegram, Slack, Phone apps, or Web
 
 **Capabilities:**
 - 🤖 **3D AI Avatars** - See, hear, and interact naturally
@@ -106,6 +114,8 @@ A comprehensive AI Agent platform with **3D avatars**, **interactive worlds**, a
 | **Extensions** | Limited or none | 12 built-in + unlimited custom |
 | **Business Tools** | Basic only | Call Center, Security, Trading, SEO |
 | **Use as Platform** | Tool only | Complete website/service foundation |
+| **Cross-Platform** | Limited | Windows, Mac, Linux, Server, Docker |
+| **Framework** | Not a framework | Complete agent framework |
 
 ---
 
@@ -121,7 +131,7 @@ Agent Player gives you a **close personal AI companion** that appears wherever y
 - 📺 **TV/Screens** - Display on any screen you want
 - 🔔 **Live Interactive Notifications** - Real-time alerts with voice and avatar responses
 
-![AI Avatar Companion](public/storage/cdn/images/avatar-viewer.png)
+![AI Avatar Companion](docs/images/avatar-viewer.png)
 *Your AI companion sees you, hears you, and interacts naturally through 3D avatars*
 
 ### 🤝 AI-Enhanced Collaboration (Not Replacement)
@@ -171,19 +181,19 @@ Agent Player is the **next-generation agent platform** you need:
 ## 📸 Screenshots
 
 ### AI Avatar Companion
-![Avatar Viewer](public/storage/cdn/images/avatar-viewer.png)
+![Avatar Viewer](docs/images/avatar-viewer.png)
 *Your personal AI companion with 3D avatar, voice, and interactive notifications*
 
 ### Trading Dashboard
-![Trading Dashboard](public/storage/cdn/images/alpaca.png)
+![Trading Dashboard](docs/images/alpaca.png)
 *Professional stock & crypto trading powered by Alpaca API*
 
 ### Dashboard Control Panel
-![Control Panel](public/storage/cdn/images/panel1.jpg)
+![Control Panel](docs/images/panel1.jpg)
 *Comprehensive dashboard for managing agents, tasks, and integrations*
 
 ### Multiple Avatars
-![Avatar Gallery](public/storage/cdn/images/avatars.webp)
+![Avatar Gallery](docs/images/avatars.webp)
 *Choose from Ready Player Me, Mixamo, or upload custom 3D characters*
 
 ---
@@ -304,6 +314,116 @@ Agent Player features **ui-web4** - a breakthrough UI system where you **don't n
 
 ---
 
+## 🔧 Agent Player as a Framework
+
+**Agent Player is not just a platform** - it's a **complete framework** for building AI agent applications.
+
+### 🎯 Why It's a Framework
+
+**1. Complete Architecture**
+- ✅ **Backend Framework** - Fastify-based API with built-in routing, middleware, database
+- ✅ **Frontend Framework** - Next.js + React with 54+ ready components
+- ✅ **UI Framework** - JSON-to-UI rendering system (ui-web4)
+- ✅ **Agent Framework** - Multi-agent orchestration, memory, tools
+
+**2. Multi-Language Support**
+- 🐍 **Python** - TTS, STT, desktop control scripts
+- 📜 **JavaScript/TypeScript** - Extensions, tools, API routes
+- 🗄️ **SQL** - Database migrations and queries
+- 🎨 **JSON** - Configuration and UI definitions
+- 🌐 **Any Language** - Integrate via API endpoints
+
+**3. Built for Community**
+- 🌍 **Open Source** - MIT License, fully transparent
+- 🤝 **Community-Driven** - Built for developers, by developers
+- 📚 **Well Documented** - Complete guides, examples, templates
+- 🔌 **Extension SDK** - Create and share extensions easily
+
+**3. Cross-Platform**
+- 🪟 **Windows** - Full support on Windows 10/11
+- 🍎 **macOS** - Works perfectly on Mac
+- 🐧 **Linux** - Compatible with Ubuntu, Debian, CentOS
+- ☁️ **Server** - Deploy on any cloud (AWS, Azure, GCP, DigitalOcean)
+- 🐳 **Docker** - Containerized deployment ready
+
+**4. Framework Features**
+- 🏗️ **Modular Architecture** - Use only what you need
+- 🔧 **Dependency Injection** - Clean, testable code
+- 📦 **Plugin System** - Extend without modifying core
+- 🎨 **Theming System** - Customize UI completely
+- 🌐 **API-First** - Everything accessible via REST APIs
+- 🔐 **Security Built-in** - JWT, encryption, audit logs
+
+### 🚀 Build on Agent Player Framework
+
+**What You Can Build:**
+
+**1. Custom AI Agents**
+```javascript
+// Create your own agent in minutes
+const myAgent = {
+  name: "Customer Support Bot",
+  tools: ["email", "database", "calendar"],
+  personality: "helpful and friendly",
+  memory: "multi-tier"
+};
+```
+
+**2. Extensions & Plugins**
+```javascript
+// Build custom extensions
+export default {
+  name: "My Extension",
+  routes: [...],  // API endpoints
+  tools: [...],   // AI tools
+  ui: {...}       // JSON UI config
+};
+```
+
+**3. Complete Applications**
+- CRM systems with AI assistants
+- Trading platforms with automation
+- Educational apps with 3D avatars
+- Customer service platforms
+- SaaS products with AI cores
+
+**4. Integration Services**
+- Connect to ANY external API
+- Build custom channel integrations
+- Create workflow automation
+- Data processing pipelines
+
+### 📖 Framework Documentation
+
+**Getting Started:**
+- `docs/FRAMEWORK_GUIDE.md` - Complete framework guide
+- `docs/EXTENSION_DEVELOPMENT.md` - Build extensions
+- `docs/API.md` - API reference
+- `extensions/README.md` - Extension examples
+
+**Community:**
+- GitHub Discussions - Ask questions, share projects
+- Extension Registry - Share your extensions
+- Examples Repository - Learn from real projects
+
+### 🌟 Framework Advantages
+
+| Feature | Traditional Frameworks | **Agent Player Framework** |
+|---------|----------------------|---------------------------|
+| **AI-Native** | Add AI later | AI-first architecture |
+| **UI System** | Manual coding | JSON → Auto-render |
+| **Multi-Agent** | Single agent | Coordinate agent teams |
+| **Extensions** | Complex setup | JavaScript only, simple |
+| **Backend** | Choose/build | Fastify included |
+| **Frontend** | Choose/build | Next.js included |
+| **Database** | Setup required | SQLite ready |
+| **Real-time** | WebSocket setup | Built-in SSE/WebSocket |
+| **3D Avatars** | Build from scratch | Ready to use |
+| **Memory System** | Implement yourself | 3-tier system ready |
+| **Learning Curve** | Weeks | Hours |
+
+---
+
 ## ✨ Features
 
 ### 🤖 AI Agent System
@@ -365,7 +485,7 @@ Browse a collection of high-quality 3D characters. From realistic to cartoon, fa
 
 **Built-in stock & crypto trading platform** powered by Alpaca API:
 
-![Alpaca Trading](public/storage/cdn/images/alpaca.png)
+![Alpaca Trading](docs/images/alpaca.png)
 
 - **Paper Trading** - Practice with $100,000 virtual money
 - **Live Trading** - Real money trading (requires Alpaca account + KYC)
