@@ -117,7 +117,98 @@ export class StorageManager {
       }
     }
 
+    // Sync on-disk files that aren't yet indexed
+    this.syncDiskFiles();
+
     console.log(`[StorageManager] ✅ Ready (provider: ${provider.name})`);
+  }
+
+  /**
+   * Scan public/storage on disk and index any files missing from storage_files table.
+   * Covers cache/, cdn/, avatars/, and backgrounds/ directories.
+   */
+  private syncDiskFiles(): void {
+    const projectRoot = path.join(process.cwd(), '..', '..');
+    const storageRoot = path.join(projectRoot, 'public', 'storage');
+    if (!fs.existsSync(storageRoot)) return;
+
+    const db = getDatabase();
+    const existing = new Set(
+      (db.prepare('SELECT filepath FROM storage_files').all() as { filepath: string }[])
+        .map(r => r.filepath)
+    );
+
+    const extToMime: Record<string, string> = {
+      '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+      '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+      '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+      '.mp4': 'video/mp4', '.webm': 'video/webm',
+      '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.fbx': 'application/octet-stream',
+      '.json': 'application/json', '.txt': 'text/plain', '.pdf': 'application/pdf',
+    };
+
+    // Zones to scan: standard cache/cdn + extra top-level dirs
+    const scanDirs: { dir: string; zone: StorageZone; defaultCategory?: string }[] = [
+      { dir: 'cache', zone: 'cache' },
+      { dir: 'cdn', zone: 'cdn' },
+      { dir: 'avatars', zone: 'cdn', defaultCategory: 'avatars' },
+      { dir: 'backgrounds', zone: 'cdn', defaultCategory: 'images' },
+    ];
+
+    let indexed = 0;
+
+    for (const { dir, zone, defaultCategory } of scanDirs) {
+      const dirPath = path.join(storageRoot, dir);
+      if (!fs.existsSync(dirPath)) continue;
+
+      const walkDir = (currentPath: string, relBase: string) => {
+        for (const entry of fs.readdirSync(currentPath, { withFileTypes: true })) {
+          const fullPath = path.join(currentPath, entry.name);
+          const relPath = path.join(relBase, entry.name).replace(/\\/g, '/');
+          if (entry.isDirectory()) {
+            walkDir(fullPath, relPath);
+          } else if (entry.isFile()) {
+            // Key format: "zone/category/filename" or full relative path
+            const storageKey = `${dir}/${relPath}`;
+            const absPath = fullPath.replace(/\\/g, '/');
+
+            // Skip if already indexed (by relative key or absolute path)
+            if (existing.has(storageKey) || existing.has(absPath)) continue;
+
+            const ext = path.extname(entry.name).toLowerCase();
+            const mime = extToMime[ext] ?? null;
+            const stat = fs.statSync(fullPath);
+
+            // Determine category from directory structure
+            // For cache/cdn: first subfolder is the category (e.g. cache/audio/file.mp3 → audio)
+            // For avatars/backgrounds: use defaultCategory
+            const parts = relPath.split('/');
+            const category = defaultCategory ?? (parts.length > 1 ? parts[0] : 'files');
+
+            const id = randomUUID();
+            db.prepare(`
+              INSERT OR IGNORE INTO storage_files
+                (id, zone, category, filename, filepath, mime_type, size_bytes, description,
+                 tags, ttl, expires_at, source_url, created_by, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              id, zone, category, entry.name,
+              storageKey,
+              mime, stat.size,
+              null, '[]', 'persistent', null, null, 'disk-sync',
+              stat.mtime.toISOString()
+            );
+            indexed++;
+          }
+        }
+      };
+
+      walkDir(dirPath, '');
+    }
+
+    if (indexed > 0) {
+      console.log(`[StorageManager] 📂 Indexed ${indexed} existing file(s) from disk`);
+    }
   }
 
   async save(options: StorageSaveOptions): Promise<StorageFile> {

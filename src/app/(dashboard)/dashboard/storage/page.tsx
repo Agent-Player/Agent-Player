@@ -12,6 +12,11 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+function authHeaders(): Record<string, string> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 interface StorageFile {
   id: string;
   zone: 'cache' | 'cdn';
@@ -90,9 +95,10 @@ export default function StoragePage() {
     if (category) params.set('category', category);
     if (query) params.set('q', query);
 
+    const headers = authHeaders();
     const [filesRes, statsRes] = await Promise.all([
-      fetch(`${config.backendUrl}/api/storage?${params}`),
-      fetch(`${config.backendUrl}/api/storage/stats`),
+      fetch(`${config.backendUrl}/api/storage?${params}`, { headers }),
+      fetch(`${config.backendUrl}/api/storage/stats`, { headers }),
     ]);
 
     if (filesRes.ok) {
@@ -111,13 +117,13 @@ export default function StoragePage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this file?')) return;
-    const res = await fetch(`${config.backendUrl}/api/storage/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${config.backendUrl}/api/storage/${id}`, { method: 'DELETE', headers: authHeaders() });
     if (res.ok) fetchData();
   };
 
   const handleCleanup = async () => {
     setCleaningUp(true);
-    const res = await fetch(`${config.backendUrl}/api/storage/cleanup`, { method: 'POST' });
+    const res = await fetch(`${config.backendUrl}/api/storage/cleanup`, { method: 'POST', headers: authHeaders() });
     if (res.ok) {
       const data = await res.json();
       toast.success(`Cleaned ${data.deleted} expired files (${formatBytes(data.freedBytes)} freed)`);
