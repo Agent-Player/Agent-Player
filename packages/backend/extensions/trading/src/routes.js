@@ -2649,5 +2649,735 @@ export async function registerTradingRoutes(fastify) {
     }
   });
 
-  console.log('[Trading] ✅ 27 trading routes registered (including portfolio snapshots + WebSocket stream)');
+  // ============================================================================
+  // OPTIONS TRADING ROUTES
+  // ============================================================================
+
+  // 1. GET Options Chain for Symbol
+  fastify.get('/api/ext/trading/options/chain/:symbol', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+      const { symbol } = request.params;
+      const { expirationDate, strikePrice, optionType } = request.query;
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT ta.*, c.value as api_key, c2.value as api_secret
+        FROM trading_accounts ta
+        LEFT JOIN credentials c ON ta.api_key_credential_id = c.id
+        LEFT JOIN credentials c2 ON ta.api_secret_credential_id = c2.id
+        WHERE ta.user_id = ? AND ta.is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      const apiKey = account.api_key;
+      const apiSecret = account.api_secret;
+
+      if (!apiKey || !apiSecret) {
+        return reply.code(400).send({ error: 'Invalid API credentials' });
+      }
+
+      // Get options chain from Alpaca
+      const alpaca = createAlpacaClient(apiKey, apiSecret, account.mode === 'paper');
+      const chain = await getOptionsChain(alpaca, symbol, {
+        expirationDate,
+        strikePrice,
+        optionType
+      });
+
+      // Cache the chain data
+      const now = new Date().toISOString();
+      for (const contract of chain) {
+        db.prepare(`
+          INSERT OR REPLACE INTO trading_options_chain_cache (
+            symbol, option_symbol, option_type, strike_price, expiration_date,
+            bid, ask, last_price, volume, open_interest, implied_volatility,
+            delta, gamma, theta, vega, rho, fetched_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          symbol,
+          contract.symbol,
+          contract.type,
+          contract.strikePrice,
+          contract.expirationDate,
+          contract.bid || null,
+          contract.ask || null,
+          contract.lastPrice || null,
+          contract.volume || 0,
+          contract.openInterest || 0,
+          contract.impliedVolatility || null,
+          contract.greeks?.delta || null,
+          contract.greeks?.gamma || null,
+          contract.greeks?.theta || null,
+          contract.greeks?.vega || null,
+          contract.greeks?.rho || null,
+          now
+        );
+      }
+
+      return reply.send({ chain });
+    } catch (error) {
+      console.error('[Trading Options] Get chain error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to fetch options chain' });
+    }
+  });
+
+  // 2. GET Expiration Dates for Symbol
+  fastify.get('/api/ext/trading/options/expirations/:symbol', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+      const { symbol } = request.params;
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT ta.*, c.value as api_key, c2.value as api_secret
+        FROM trading_accounts ta
+        LEFT JOIN credentials c ON ta.api_key_credential_id = c.id
+        LEFT JOIN credentials c2 ON ta.api_secret_credential_id = c2.id
+        WHERE ta.user_id = ? AND ta.is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      const apiKey = account.api_key;
+      const apiSecret = account.api_secret;
+
+      if (!apiKey || !apiSecret) {
+        return reply.code(400).send({ error: 'Invalid API credentials' });
+      }
+
+      // Get expiration dates from Alpaca
+      const alpaca = createAlpacaClient(apiKey, apiSecret, account.mode === 'paper');
+      const expirations = await getExpirationDates(alpaca, symbol);
+
+      return reply.send({ expirations });
+    } catch (error) {
+      console.error('[Trading Options] Get expirations error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to fetch expiration dates' });
+    }
+  });
+
+  // 3. GET Specific Option Contract
+  fastify.get('/api/ext/trading/options/contract/:optionSymbol', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+      const { optionSymbol } = request.params;
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT ta.*, c.value as api_key, c2.value as api_secret
+        FROM trading_accounts ta
+        LEFT JOIN credentials c ON ta.api_key_credential_id = c.id
+        LEFT JOIN credentials c2 ON ta.api_secret_credential_id = c2.id
+        WHERE ta.user_id = ? AND ta.is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      const apiKey = account.api_key;
+      const apiSecret = account.api_secret;
+
+      if (!apiKey || !apiSecret) {
+        return reply.code(400).send({ error: 'Invalid API credentials' });
+      }
+
+      // Get contract details from Alpaca
+      const alpaca = createAlpacaClient(apiKey, apiSecret, account.mode === 'paper');
+      const contract = await getOptionContract(alpaca, optionSymbol);
+
+      return reply.send({ contract });
+    } catch (error) {
+      console.error('[Trading Options] Get contract error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to fetch option contract' });
+    }
+  });
+
+  // 4. POST Place Options Order
+  fastify.post('/api/ext/trading/options/orders', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+      const { optionSymbol, qty, side, orderType, limitPrice } = request.body;
+
+      // Validate input
+      if (!optionSymbol || !qty || !side || !orderType) {
+        return reply.code(400).send({ error: 'Missing required fields' });
+      }
+
+      if (!['buy_to_open', 'buy_to_close', 'sell_to_open', 'sell_to_close'].includes(side)) {
+        return reply.code(400).send({ error: 'Invalid side. Must be buy_to_open, buy_to_close, sell_to_open, or sell_to_close' });
+      }
+
+      if (!['market', 'limit'].includes(orderType)) {
+        return reply.code(400).send({ error: 'Invalid order type. Must be market or limit' });
+      }
+
+      if (orderType === 'limit' && !limitPrice) {
+        return reply.code(400).send({ error: 'Limit price required for limit orders' });
+      }
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT ta.*, c.value as api_key, c2.value as api_secret
+        FROM trading_accounts ta
+        LEFT JOIN credentials c ON ta.api_key_credential_id = c.id
+        LEFT JOIN credentials c2 ON ta.api_secret_credential_id = c2.id
+        WHERE ta.user_id = ? AND ta.is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      const apiKey = account.api_key;
+      const apiSecret = account.api_secret;
+
+      if (!apiKey || !apiSecret) {
+        return reply.code(400).send({ error: 'Invalid API credentials' });
+      }
+
+      // Place order via Alpaca
+      const alpaca = createAlpacaClient(apiKey, apiSecret, account.mode === 'paper');
+      const order = await placeOptionsOrder(alpaca, {
+        optionSymbol,
+        qty,
+        side,
+        orderType,
+        limitPrice
+      });
+
+      // Save order to database
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO trading_options_orders (
+          trading_account_id, option_symbol, qty, side, order_type,
+          limit_price, status, alpaca_order_id, placed_at, placed_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'user')
+      `).run(
+        account.id,
+        optionSymbol,
+        qty,
+        side,
+        orderType,
+        limitPrice || null,
+        order.status || 'pending',
+        order.id,
+        now
+      );
+
+      // Log activity
+      db.prepare(`
+        INSERT INTO trading_activity_log (
+          trading_account_id, action, details, created_at
+        ) VALUES (?, ?, ?, ?)
+      `).run(
+        account.id,
+        'options_order_placed',
+        JSON.stringify({ optionSymbol, qty, side, orderType, limitPrice }),
+        now
+      );
+
+      return reply.send({ order });
+    } catch (error) {
+      console.error('[Trading Options] Place order error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to place options order' });
+    }
+  });
+
+  // 5. GET Options Orders History
+  fastify.get('/api/ext/trading/options/orders', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+      const { status, limit = 50 } = request.query;
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT id FROM trading_accounts
+        WHERE user_id = ? AND is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      // Build query
+      let query = `
+        SELECT * FROM trading_options_orders
+        WHERE trading_account_id = ?
+      `;
+      const params = [account.id];
+
+      if (status) {
+        query += ` AND status = ?`;
+        params.push(status);
+      }
+
+      query += ` ORDER BY placed_at DESC LIMIT ?`;
+      params.push(parseInt(limit));
+
+      const orders = db.prepare(query).all(...params);
+
+      return reply.send({ orders });
+    } catch (error) {
+      console.error('[Trading Options] Get orders error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to fetch options orders' });
+    }
+  });
+
+  // 6. GET Current Options Positions
+  fastify.get('/api/ext/trading/options/positions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT ta.*, c.value as api_key, c2.value as api_secret
+        FROM trading_accounts ta
+        LEFT JOIN credentials c ON ta.api_key_credential_id = c.id
+        LEFT JOIN credentials c2 ON ta.api_secret_credential_id = c2.id
+        WHERE ta.user_id = ? AND ta.is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      const apiKey = account.api_key;
+      const apiSecret = account.api_secret;
+
+      if (!apiKey || !apiSecret) {
+        return reply.code(400).send({ error: 'Invalid API credentials' });
+      }
+
+      // Get positions from Alpaca
+      const alpaca = createAlpacaClient(apiKey, apiSecret, account.mode === 'paper');
+      const positions = await getOptionsPositions(alpaca);
+
+      // Update database with current positions
+      const now = new Date().toISOString();
+
+      // Clear old positions first
+      db.prepare(`DELETE FROM trading_options_positions WHERE trading_account_id = ?`).run(account.id);
+
+      // Insert current positions
+      for (const pos of positions) {
+        db.prepare(`
+          INSERT INTO trading_options_positions (
+            trading_account_id, symbol, option_symbol, option_type,
+            strike_price, expiration_date, qty, side, avg_entry_price,
+            current_price, market_value, unrealized_pl, unrealized_pl_percent,
+            delta, gamma, theta, vega, rho, implied_volatility, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          account.id,
+          pos.symbol,
+          pos.optionSymbol || pos.symbol,
+          pos.optionType || 'call',
+          pos.strikePrice || 0,
+          pos.expirationDate || '',
+          pos.qty || 0,
+          pos.side || 'long',
+          pos.avg_entry_price || 0,
+          pos.current_price || 0,
+          pos.market_value || 0,
+          pos.unrealized_pl || 0,
+          pos.unrealized_plpc || 0,
+          pos.greeks?.delta || null,
+          pos.greeks?.gamma || null,
+          pos.greeks?.theta || null,
+          pos.greeks?.vega || null,
+          pos.greeks?.rho || null,
+          pos.impliedVolatility || null,
+          now
+        );
+      }
+
+      return reply.send({ positions });
+    } catch (error) {
+      console.error('[Trading Options] Get positions error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to fetch options positions' });
+    }
+  });
+
+  // 7. POST Calculate Greeks for Contract
+  fastify.post('/api/ext/trading/options/greeks', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const {
+        spotPrice,
+        strikePrice,
+        timeToExpiration,
+        riskFreeRate,
+        volatility,
+        optionType
+      } = request.body;
+
+      // Validate input
+      if (!spotPrice || !strikePrice || !timeToExpiration || !riskFreeRate || !volatility || !optionType) {
+        return reply.code(400).send({ error: 'Missing required fields for Greeks calculation' });
+      }
+
+      if (!['call', 'put'].includes(optionType)) {
+        return reply.code(400).send({ error: 'Option type must be call or put' });
+      }
+
+      // Calculate Greeks using Black-Scholes
+      const greeks = calculateGreeks({
+        S: spotPrice,
+        K: strikePrice,
+        T: timeToExpiration,
+        r: riskFreeRate,
+        sigma: volatility,
+        type: optionType
+      });
+
+      return reply.send({ greeks });
+    } catch (error) {
+      console.error('[Trading Options] Calculate Greeks error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to calculate Greeks' });
+    }
+  });
+
+  // 8. GET Saved Strategies
+  fastify.get('/api/ext/trading/options/strategies', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT id FROM trading_accounts
+        WHERE user_id = ? AND is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      const strategies = db.prepare(`
+        SELECT * FROM trading_options_strategies
+        WHERE trading_account_id = ?
+        ORDER BY created_at DESC
+      `).all(account.id);
+
+      // Parse legs JSON
+      const parsedStrategies = strategies.map(s => ({
+        ...s,
+        legs: JSON.parse(s.legs || '[]')
+      }));
+
+      return reply.send({ strategies: parsedStrategies });
+    } catch (error) {
+      console.error('[Trading Options] Get strategies error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to fetch strategies' });
+    }
+  });
+
+  // 9. POST Create New Strategy
+  fastify.post('/api/ext/trading/options/strategies', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+      const { name, strategyType, legs, notes } = request.body;
+
+      if (!name || !strategyType || !legs || !Array.isArray(legs)) {
+        return reply.code(400).send({ error: 'Missing required fields' });
+      }
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT id FROM trading_accounts
+        WHERE user_id = ? AND is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      // Calculate totals
+      const maxProfit = legs.reduce((sum, leg) => sum + (leg.maxProfit || 0), 0);
+      const maxLoss = legs.reduce((sum, leg) => sum + (leg.maxLoss || 0), 0);
+      const netDebit = legs.reduce((sum, leg) => sum + (leg.debit || 0), 0);
+      const netCredit = legs.reduce((sum, leg) => sum + (leg.credit || 0), 0);
+
+      const now = new Date().toISOString();
+
+      const result = db.prepare(`
+        INSERT INTO trading_options_strategies (
+          trading_account_id, name, strategy_type, legs, max_profit,
+          max_loss, net_debit, net_credit, status, notes, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)
+      `).run(
+        account.id,
+        name,
+        strategyType,
+        JSON.stringify(legs),
+        maxProfit,
+        maxLoss,
+        netDebit,
+        netCredit,
+        notes || null,
+        now
+      );
+
+      const strategy = {
+        id: result.lastInsertRowid,
+        trading_account_id: account.id,
+        name,
+        strategy_type: strategyType,
+        legs,
+        max_profit: maxProfit,
+        max_loss: maxLoss,
+        net_debit: netDebit,
+        net_credit: netCredit,
+        status: 'planned',
+        notes: notes || null,
+        created_at: now
+      };
+
+      return reply.send({ strategy });
+    } catch (error) {
+      console.error('[Trading Options] Create strategy error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to create strategy' });
+    }
+  });
+
+  // 10. PUT Update Strategy
+  fastify.put('/api/ext/trading/options/strategies/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+      const { id } = request.params;
+      const { name, legs, status, notes } = request.body;
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT id FROM trading_accounts
+        WHERE user_id = ? AND is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      // Check strategy exists and belongs to user
+      const existing = db.prepare(`
+        SELECT id FROM trading_options_strategies
+        WHERE id = ? AND trading_account_id = ?
+      `).get(id, account.id);
+
+      if (!existing) {
+        return reply.code(404).send({ error: 'Strategy not found' });
+      }
+
+      // Build update query
+      const updates = [];
+      const params = [];
+
+      if (name !== undefined) {
+        updates.push('name = ?');
+        params.push(name);
+      }
+
+      if (legs !== undefined) {
+        updates.push('legs = ?');
+        params.push(JSON.stringify(legs));
+
+        // Recalculate totals
+        const maxProfit = legs.reduce((sum, leg) => sum + (leg.maxProfit || 0), 0);
+        const maxLoss = legs.reduce((sum, leg) => sum + (leg.maxLoss || 0), 0);
+        const netDebit = legs.reduce((sum, leg) => sum + (leg.debit || 0), 0);
+        const netCredit = legs.reduce((sum, leg) => sum + (leg.credit || 0), 0);
+
+        updates.push('max_profit = ?', 'max_loss = ?', 'net_debit = ?', 'net_credit = ?');
+        params.push(maxProfit, maxLoss, netDebit, netCredit);
+      }
+
+      if (status !== undefined) {
+        updates.push('status = ?');
+        params.push(status);
+      }
+
+      if (notes !== undefined) {
+        updates.push('notes = ?');
+        params.push(notes);
+      }
+
+      if (updates.length === 0) {
+        return reply.code(400).send({ error: 'No fields to update' });
+      }
+
+      params.push(id);
+
+      db.prepare(`
+        UPDATE trading_options_strategies
+        SET ${updates.join(', ')}
+        WHERE id = ?
+      `).run(...params);
+
+      // Return updated strategy
+      const updated = db.prepare(`
+        SELECT * FROM trading_options_strategies WHERE id = ?
+      `).get(id);
+
+      return reply.send({
+        strategy: {
+          ...updated,
+          legs: JSON.parse(updated.legs || '[]')
+        }
+      });
+    } catch (error) {
+      console.error('[Trading Options] Update strategy error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to update strategy' });
+    }
+  });
+
+  // 11. DELETE Strategy
+  fastify.delete('/api/ext/trading/options/strategies/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+      const { id } = request.params;
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT id FROM trading_accounts
+        WHERE user_id = ? AND is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      // Check strategy exists and belongs to user
+      const existing = db.prepare(`
+        SELECT id FROM trading_options_strategies
+        WHERE id = ? AND trading_account_id = ?
+      `).get(id, account.id);
+
+      if (!existing) {
+        return reply.code(404).send({ error: 'Strategy not found' });
+      }
+
+      db.prepare(`DELETE FROM trading_options_strategies WHERE id = ?`).run(id);
+
+      return reply.send({ success: true });
+    } catch (error) {
+      console.error('[Trading Options] Delete strategy error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to delete strategy' });
+    }
+  });
+
+  // 12. GET Options Analytics
+  fastify.get('/api/ext/trading/options/analytics', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    try {
+      const userId = getUserIdFromRequest(request);
+      const { period = '30d' } = request.query;
+
+      // Get active trading account
+      const account = db.prepare(`
+        SELECT id FROM trading_accounts
+        WHERE user_id = ? AND is_active = 1
+      `).get(userId);
+
+      if (!account) {
+        return reply.code(404).send({ error: 'No active trading account found' });
+      }
+
+      // Calculate date range
+      const now = new Date();
+      let startDate;
+
+      switch (period) {
+        case '7d':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case '90d':
+          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+
+      const startDateStr = startDate.toISOString();
+
+      // Get analytics data
+      const totalTrades = db.prepare(`
+        SELECT COUNT(*) as count FROM trading_options_orders
+        WHERE trading_account_id = ? AND placed_at >= ?
+      `).get(account.id, startDateStr)?.count || 0;
+
+      const winningTrades = db.prepare(`
+        SELECT COUNT(*) as count FROM trading_options_orders
+        WHERE trading_account_id = ? AND placed_at >= ? AND filled_price > limit_price
+      `).get(account.id, startDateStr)?.count || 0;
+
+      const totalPL = db.prepare(`
+        SELECT SUM(unrealized_pl) as total FROM trading_options_positions
+        WHERE trading_account_id = ?
+      `).get(account.id)?.total || 0;
+
+      const avgDelta = db.prepare(`
+        SELECT AVG(delta) as avg FROM trading_options_positions
+        WHERE trading_account_id = ? AND delta IS NOT NULL
+      `).get(account.id)?.avg || 0;
+
+      const avgTheta = db.prepare(`
+        SELECT AVG(theta) as avg FROM trading_options_positions
+        WHERE trading_account_id = ? AND theta IS NOT NULL
+      `).get(account.id)?.avg || 0;
+
+      const mostTradedSymbols = db.prepare(`
+        SELECT symbol, COUNT(*) as count
+        FROM trading_options_orders
+        WHERE trading_account_id = ? AND placed_at >= ?
+        GROUP BY symbol
+        ORDER BY count DESC
+        LIMIT 5
+      `).all(account.id, startDateStr);
+
+      const analytics = {
+        period,
+        totalTrades,
+        winningTrades,
+        winRate: totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(2) : 0,
+        totalPL: totalPL.toFixed(2),
+        avgDelta: avgDelta.toFixed(4),
+        avgTheta: avgTheta.toFixed(4),
+        mostTradedSymbols
+      };
+
+      // Save analytics snapshot
+      const analyticsStr = JSON.stringify(analytics);
+      const nowStr = new Date().toISOString();
+
+      db.prepare(`
+        INSERT INTO trading_options_analytics (
+          trading_account_id, period, total_trades, winning_trades,
+          total_pl, avg_delta, avg_theta, analytics_data, calculated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        account.id,
+        period,
+        totalTrades,
+        winningTrades,
+        totalPL,
+        avgDelta,
+        avgTheta,
+        analyticsStr,
+        nowStr
+      );
+
+      return reply.send({ analytics });
+    } catch (error) {
+      console.error('[Trading Options] Get analytics error:', error);
+      return reply.code(500).send({ error: error.message || 'Failed to fetch analytics' });
+    }
+  });
+
+  console.log('[Trading] ✅ 39 trading routes registered (27 stock + 12 options)');
 }
