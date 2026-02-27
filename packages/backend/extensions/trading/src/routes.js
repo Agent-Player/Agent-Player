@@ -24,6 +24,13 @@ import {
   testCredentials,
   createRealtimeConnection,
   getNews,
+  // Options Trading Functions
+  getOptionsChain,
+  getOptionContract,
+  placeOptionsOrder,
+  getOptionsPositions,
+  calculateGreeks,
+  getExpirationDates,
 } from './alpaca-client.js';
 import { randomBytes } from 'crypto';
 import { getCredentialManager } from '../../../src/credentials/index.js';

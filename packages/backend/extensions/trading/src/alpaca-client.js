@@ -453,3 +453,309 @@ export async function getNews(alpaca, options = {}) {
     throw new Error(`Alpaca News API error: ${error.message}`);
   }
 }
+
+// ============================================================================
+// OPTIONS TRADING FUNCTIONS
+// ============================================================================
+
+/**
+ * Get options chain for a symbol
+ * @param {Alpaca} alpaca - Alpaca client instance
+ * @param {string} symbol - Underlying symbol (e.g., 'AAPL')
+ * @param {Object} options - { expirationDate?, strikePrice?, optionType? }
+ * @returns {Promise<Array>} Options chain data
+ */
+export async function getOptionsChain(alpaca, symbol, options = {}) {
+  try {
+    // NOTE: Alpaca's options API requires special approval
+    // API endpoint: GET /v2/options/contracts
+    // Reference: https://alpaca.markets/docs/api-references/trading-api/options-trading/
+
+    const params = {
+      underlying_symbols: symbol,
+      status: 'active', // Only active contracts
+    };
+
+    if (options.expirationDate) {
+      params.expiration_date = options.expirationDate;
+    }
+
+    if (options.strikePrice) {
+      params.strike_price_gte = options.strikePrice * 0.9; // 10% below
+      params.strike_price_lte = options.strikePrice * 1.1; // 10% above
+    }
+
+    if (options.optionType) {
+      params.type = options.optionType; // 'call' or 'put'
+    }
+
+    // Use Alpaca SDK's options method (if available)
+    // For now, we'll make a direct API call via axios
+    const response = await alpaca.request({
+      method: 'GET',
+      url: '/v2/options/contracts',
+      params,
+    });
+
+    const contracts = response.data || response;
+
+    return contracts.map((contract) => ({
+      option_symbol: contract.symbol,
+      underlying_symbol: contract.underlying_symbol || symbol,
+      expiration_date: contract.expiration_date,
+      strike_price: parseFloat(contract.strike_price),
+      option_type: contract.type, // 'call' or 'put'
+      size: contract.size || 100, // Contracts usually represent 100 shares
+      open_interest: contract.open_interest || 0,
+      // Latest quote (if available)
+      bid: contract.latest_quote?.bid_price || null,
+      ask: contract.latest_quote?.ask_price || null,
+      last_price: contract.latest_trade?.price || null,
+      // Greeks (if provided by Alpaca)
+      greeks: contract.greeks || null,
+      implied_volatility: contract.implied_volatility || null,
+    }));
+  } catch (error) {
+    console.error('[Alpaca] Failed to fetch options chain:', error);
+
+    // If options trading not enabled, return helpful error
+    if (error.message.includes('403') || error.message.includes('not approved')) {
+      throw new Error(
+        'Options trading not enabled. Please apply for approval at https://alpaca.markets/support'
+      );
+    }
+
+    throw new Error(`Alpaca Options API error: ${error.message}`);
+  }
+}
+
+/**
+ * Get option contract details (quote + greeks)
+ * @param {Alpaca} alpaca - Alpaca client instance
+ * @param {string} optionSymbol - Full option symbol (e.g., 'AAPL230120C00150000')
+ * @returns {Promise<Object>} Option contract details with quote and greeks
+ */
+export async function getOptionContract(alpaca, optionSymbol) {
+  try {
+    // API endpoint: GET /v2/options/snapshots/{symbol}
+    const response = await alpaca.request({
+      method: 'GET',
+      url: `/v2/options/snapshots/${optionSymbol}`,
+    });
+
+    const snapshot = response.data || response;
+
+    return {
+      option_symbol: optionSymbol,
+      // Latest quote
+      bid: snapshot.latestQuote?.bid_price || null,
+      ask: snapshot.latestQuote?.ask_price || null,
+      bid_size: snapshot.latestQuote?.bid_size || null,
+      ask_size: snapshot.latestQuote?.ask_size || null,
+      // Latest trade
+      last_price: snapshot.latestTrade?.price || null,
+      last_size: snapshot.latestTrade?.size || null,
+      // Greeks (if available)
+      greeks: snapshot.greeks || null,
+      implied_volatility: snapshot.implied_volatility || null,
+      // Volume and Open Interest
+      volume: snapshot.dailyBar?.volume || 0,
+      open_interest: snapshot.open_interest || 0,
+    };
+  } catch (error) {
+    console.error('[Alpaca] Failed to fetch option contract:', error);
+    throw new Error(`Alpaca Options API error: ${error.message}`);
+  }
+}
+
+/**
+ * Place an options order
+ * @param {Alpaca} alpaca - Alpaca client instance
+ * @param {Object} orderParams - { optionSymbol, qty, side, orderType, limitPrice?, timeInForce? }
+ * @returns {Promise<Object>} Order confirmation
+ */
+export async function placeOptionsOrder(alpaca, orderParams) {
+  try {
+    const {
+      optionSymbol,
+      qty,
+      side, // 'buy_to_open', 'buy_to_close', 'sell_to_open', 'sell_to_close'
+      orderType = 'market',
+      limitPrice,
+      timeInForce = 'day',
+    } = orderParams;
+
+    // Validate required fields
+    if (!optionSymbol || !qty || !side) {
+      throw new Error('Missing required fields: optionSymbol, qty, side');
+    }
+
+    const order = {
+      symbol: optionSymbol,
+      qty: parseInt(qty),
+      side: side, // For options: buy_to_open, sell_to_close, etc.
+      type: orderType,
+      time_in_force: timeInForce,
+    };
+
+    if (orderType === 'limit' && limitPrice) {
+      order.limit_price = parseFloat(limitPrice);
+    }
+
+    // Submit order via Alpaca SDK
+    const response = await alpaca.createOrder(order);
+
+    return {
+      id: response.id,
+      option_symbol: response.symbol,
+      qty: parseInt(response.qty),
+      side: response.side,
+      type: response.type,
+      status: response.status,
+      filled_qty: parseInt(response.filled_qty || 0),
+      filled_avg_price: parseFloat(response.filled_avg_price || 0),
+      created_at: response.created_at,
+    };
+  } catch (error) {
+    console.error('[Alpaca] Failed to place options order:', error);
+    throw new Error(`Alpaca Options Order error: ${error.message}`);
+  }
+}
+
+/**
+ * Get options positions
+ * @param {Alpaca} alpaca - Alpaca client instance
+ * @returns {Promise<Array>} List of options positions
+ */
+export async function getOptionsPositions(alpaca) {
+  try {
+    // Get all positions and filter for options (asset_class = 'us_option')
+    const allPositions = await alpaca.getPositions();
+
+    const optionsPositions = allPositions.filter(
+      (pos) => pos.asset_class === 'us_option'
+    );
+
+    return optionsPositions.map((pos) => ({
+      option_symbol: pos.symbol,
+      underlying_symbol: pos.underlying_symbol || null,
+      qty: parseFloat(pos.qty),
+      avg_entry_price: parseFloat(pos.avg_entry_price),
+      current_price: parseFloat(pos.current_price),
+      market_value: parseFloat(pos.market_value),
+      cost_basis: parseFloat(pos.cost_basis || pos.avg_entry_price * pos.qty),
+      unrealized_pl: parseFloat(pos.unrealized_pl),
+      unrealized_plpc: parseFloat(pos.unrealized_plpc),
+      side: pos.side, // 'long' or 'short'
+    }));
+  } catch (error) {
+    console.error('[Alpaca] Failed to get options positions:', error);
+    throw new Error(`Alpaca API error: ${error.message}`);
+  }
+}
+
+/**
+ * Calculate Black-Scholes Greeks (fallback if Alpaca doesn't provide them)
+ * @param {Object} params - { underlyingPrice, strikePrice, timeToExpiry, volatility, riskFreeRate, optionType }
+ * @returns {Object} Greeks: { delta, gamma, theta, vega, rho }
+ */
+export function calculateGreeks(params) {
+  const {
+    underlyingPrice,
+    strikePrice,
+    timeToExpiry, // In years (e.g., 30 days = 30/365)
+    volatility, // Annual volatility (e.g., 0.25 for 25%)
+    riskFreeRate = 0.05, // Default 5% annual risk-free rate
+    optionType = 'call', // 'call' or 'put'
+  } = params;
+
+  // Validate inputs
+  if (!underlyingPrice || !strikePrice || !timeToExpiry || !volatility) {
+    return null;
+  }
+
+  // Standard normal CDF (approximation)
+  function normalCDF(x) {
+    const t = 1 / (1 + 0.2316419 * Math.abs(x));
+    const d = 0.3989423 * Math.exp((-x * x) / 2);
+    const prob =
+      d *
+      t *
+      (0.3193815 +
+        t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+    return x > 0 ? 1 - prob : prob;
+  }
+
+  // Standard normal PDF
+  function normalPDF(x) {
+    return Math.exp((-x * x) / 2) / Math.sqrt(2 * Math.PI);
+  }
+
+  // Calculate d1 and d2
+  const d1 =
+    (Math.log(underlyingPrice / strikePrice) +
+      (riskFreeRate + (volatility * volatility) / 2) * timeToExpiry) /
+    (volatility * Math.sqrt(timeToExpiry));
+
+  const d2 = d1 - volatility * Math.sqrt(timeToExpiry);
+
+  // Calculate Greeks
+  let delta, gamma, theta, vega, rho;
+
+  if (optionType === 'call') {
+    // Call option Greeks
+    delta = normalCDF(d1);
+    theta =
+      ((-underlyingPrice * normalPDF(d1) * volatility) / (2 * Math.sqrt(timeToExpiry)) -
+        riskFreeRate * strikePrice * Math.exp(-riskFreeRate * timeToExpiry) * normalCDF(d2)) /
+      365; // Daily theta
+    rho =
+      (strikePrice * timeToExpiry * Math.exp(-riskFreeRate * timeToExpiry) * normalCDF(d2)) / 100;
+  } else {
+    // Put option Greeks
+    delta = normalCDF(d1) - 1;
+    theta =
+      ((-underlyingPrice * normalPDF(d1) * volatility) / (2 * Math.sqrt(timeToExpiry)) +
+        riskFreeRate * strikePrice * Math.exp(-riskFreeRate * timeToExpiry) * normalCDF(-d2)) /
+      365; // Daily theta
+    rho =
+      (-strikePrice * timeToExpiry * Math.exp(-riskFreeRate * timeToExpiry) * normalCDF(-d2)) /
+      100;
+  }
+
+  // Gamma and Vega are the same for calls and puts
+  gamma = normalPDF(d1) / (underlyingPrice * volatility * Math.sqrt(timeToExpiry));
+  vega = (underlyingPrice * normalPDF(d1) * Math.sqrt(timeToExpiry)) / 100;
+
+  return {
+    delta: parseFloat(delta.toFixed(4)),
+    gamma: parseFloat(gamma.toFixed(4)),
+    theta: parseFloat(theta.toFixed(4)), // Daily theta
+    vega: parseFloat(vega.toFixed(4)), // Per 1% change in IV
+    rho: parseFloat(rho.toFixed(4)), // Per 1% change in interest rate
+  };
+}
+
+/**
+ * Get list of available expiration dates for a symbol
+ * @param {Alpaca} alpaca - Alpaca client instance
+ * @param {string} symbol - Underlying symbol
+ * @returns {Promise<Array>} Array of expiration dates (ISO format)
+ */
+export async function getExpirationDates(alpaca, symbol) {
+  try {
+    // Fetch options chain without filtering by expiration
+    const chain = await getOptionsChain(alpaca, symbol);
+
+    // Extract unique expiration dates
+    const expirations = [...new Set(chain.map((contract) => contract.expiration_date))];
+
+    // Sort chronologically
+    expirations.sort();
+
+    return expirations;
+  } catch (error) {
+    console.error('[Alpaca] Failed to fetch expiration dates:', error);
+    throw new Error(`Alpaca API error: ${error.message}`);
+  }
+}

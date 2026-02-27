@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import config from '@/config';
+import { config } from '@/lib/config';
 
 interface NewsArticle {
   id: string;
