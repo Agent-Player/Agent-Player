@@ -10,6 +10,27 @@ Tasks to enhance the Trading Extension UI/UX to match professional trading platf
 
 ---
 
+## 🐛 Bug Fixes
+
+### Runtime Error Fixes (2026-02-27)
+**Fixed**: Two critical errors preventing Analytics tab and WebSocket from working
+
+**Error 1**: "Failed to load portfolio history"
+- **Location**: `analytics-tab.tsx:234` in `loadPortfolioSnapshots()`
+- **Cause**: Missing backend endpoint `/api/ext/trading/portfolio/snapshots`
+- **Fix**: Added new GET endpoint that returns historical portfolio snapshots filtered by days parameter
+- **Result**: Analytics dashboard now successfully loads historical data for charts
+
+**Error 2**: "[WebSocket] Connection error"
+- **Location**: `trading/page.tsx:166` in WebSocket useEffect
+- **Cause**: SQL query error - `trading_watchlist` table uses `user_id`, not `trading_account_id`
+- **Fix**: Corrected watchlist query in `/stream` endpoint from `trading_account_id` to `user_id`
+- **Result**: WebSocket real-time price updates now connect successfully
+
+**Commit**: `bd17cd18d` - "Fix trading extension API errors"
+
+---
+
 ## 🔥 Priority 1: Essential Features (This Week) ✅ COMPLETE
 
 ### 1. Stock Search with Autocomplete
