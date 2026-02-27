@@ -1037,6 +1037,693 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // ============================================================================
+  // WATCHLIST GROUPS (Multiple Watchlists)
+  // ============================================================================
+
+  /**
+   * GET /api/ext/trading/watchlist/groups
+   * Get all watchlist groups for user
+   */
+  fastify.get('/watchlist/groups', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+
+      const groups = db
+        .prepare(
+          `
+        SELECT id, name, description, color, icon, display_order, is_default, created_at
+        FROM trading_watchlist_groups
+        WHERE user_id = ?
+        ORDER BY display_order ASC, created_at DESC
+      `
+        )
+        .all(userId);
+
+      // If no groups exist, create default one
+      if (groups.length === 0) {
+        const defaultId = randomBytes(16).toString('hex');
+        const now = new Date().toISOString();
+
+        db.prepare(
+          `
+          INSERT INTO trading_watchlist_groups (
+            id, user_id, name, description, color, display_order, is_default, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `
+        ).run(
+          defaultId,
+          userId,
+          'My Watchlist',
+          'Default watchlist',
+          '#3B82F6',
+          0,
+          1,
+          now
+        );
+
+        return reply.send({
+          groups: [
+            {
+              id: defaultId,
+              name: 'My Watchlist',
+              description: 'Default watchlist',
+              color: '#3B82F6',
+              icon: null,
+              display_order: 0,
+              is_default: 1,
+              created_at: now
+            }
+          ]
+        });
+      }
+
+      return reply.send({ groups });
+    } catch (error) {
+      console.error('[Trading]', `Failed to fetch watchlist groups: ${error.message}`);
+      return reply.send({ error: 'Failed to fetch watchlist groups' }, 500);
+    }
+  });
+
+  /**
+   * POST /api/ext/trading/watchlist/groups
+   * Create new watchlist group
+   * Body: { name, description?, color?, icon? }
+   */
+  fastify.post('/watchlist/groups', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const { name, description, color = '#3B82F6', icon } = request.body;
+
+      if (!name || name.trim().length === 0) {
+        return reply.send({ error: 'Watchlist name is required' }, 400);
+      }
+
+      const id = randomBytes(16).toString('hex');
+      const now = new Date().toISOString();
+
+      // Get max display_order
+      const maxOrder = db
+        .prepare('SELECT MAX(display_order) as max FROM trading_watchlist_groups WHERE user_id = ?')
+        .get(userId);
+
+      const displayOrder = (maxOrder?.max || 0) + 1;
+
+      db.prepare(
+        `
+        INSERT INTO trading_watchlist_groups (
+          id, user_id, name, description, color, icon, display_order, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+      ).run(id, userId, name.trim(), description || null, color, icon || null, displayOrder, now);
+
+      console.log('[Trading]', `Created watchlist group: ${name}`);
+
+      return reply.send({
+        success: true,
+        group: {
+          id,
+          name: name.trim(),
+          description,
+          color,
+          icon,
+          display_order: displayOrder,
+          is_default: 0,
+          created_at: now
+        }
+      });
+    } catch (error) {
+      console.error('[Trading]', `Failed to create watchlist group: ${error.message}`);
+      return reply.send({ error: 'Failed to create watchlist group' }, 500);
+    }
+  });
+
+  /**
+   * PUT /api/ext/trading/watchlist/groups/:id
+   * Update watchlist group
+   * Body: { name?, description?, color?, icon? }
+   */
+  fastify.put('/watchlist/groups/:id', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const groupId = request.params('id');
+      const { name, description, color, icon } = request.body;
+
+      // Check ownership
+      const group = db
+        .prepare('SELECT id FROM trading_watchlist_groups WHERE id = ? AND user_id = ?')
+        .get(groupId, userId);
+
+      if (!group) {
+        return reply.send({ error: 'Watchlist group not found' }, 404);
+      }
+
+      const updates = [];
+      const params = [];
+
+      if (name !== undefined) {
+        updates.push('name = ?');
+        params.push(name.trim());
+      }
+      if (description !== undefined) {
+        updates.push('description = ?');
+        params.push(description);
+      }
+      if (color !== undefined) {
+        updates.push('color = ?');
+        params.push(color);
+      }
+      if (icon !== undefined) {
+        updates.push('icon = ?');
+        params.push(icon);
+      }
+
+      if (updates.length === 0) {
+        return reply.send({ error: 'No fields to update' }, 400);
+      }
+
+      updates.push('updated_at = ?');
+      params.push(new Date().toISOString());
+      params.push(groupId, userId);
+
+      db.prepare(
+        `UPDATE trading_watchlist_groups SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`
+      ).run(...params);
+
+      console.log('[Trading]', `Updated watchlist group: ${groupId}`);
+
+      return reply.send({ success: true });
+    } catch (error) {
+      console.error('[Trading]', `Failed to update watchlist group: ${error.message}`);
+      return reply.send({ error: 'Failed to update watchlist group' }, 500);
+    }
+  });
+
+  /**
+   * DELETE /api/ext/trading/watchlist/groups/:id
+   * Delete watchlist group (and move items to default watchlist)
+   */
+  fastify.delete('/watchlist/groups/:id', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const groupId = request.params('id');
+
+      // Check ownership
+      const group = db
+        .prepare('SELECT id, is_default FROM trading_watchlist_groups WHERE id = ? AND user_id = ?')
+        .get(groupId, userId);
+
+      if (!group) {
+        return reply.send({ error: 'Watchlist group not found' }, 404);
+      }
+
+      if (group.is_default === 1) {
+        return reply.send({ error: 'Cannot delete default watchlist' }, 400);
+      }
+
+      // Get default watchlist
+      const defaultGroup = db
+        .prepare('SELECT id FROM trading_watchlist_groups WHERE user_id = ? AND is_default = 1')
+        .get(userId);
+
+      if (defaultGroup) {
+        // Move items to default watchlist
+        db.prepare(
+          'UPDATE trading_watchlist SET watchlist_group_id = ? WHERE watchlist_group_id = ?'
+        ).run(defaultGroup.id, groupId);
+      } else {
+        // No default? Set items to null (ungrouped)
+        db.prepare(
+          'UPDATE trading_watchlist SET watchlist_group_id = NULL WHERE watchlist_group_id = ?'
+        ).run(groupId);
+      }
+
+      // Delete group
+      db.prepare('DELETE FROM trading_watchlist_groups WHERE id = ? AND user_id = ?').run(
+        groupId,
+        userId
+      );
+
+      console.log('[Trading]', `Deleted watchlist group: ${groupId}`);
+
+      return reply.send({ success: true });
+    } catch (error) {
+      console.error('[Trading]', `Failed to delete watchlist group: ${error.message}`);
+      return reply.send({ error: 'Failed to delete watchlist group' }, 500);
+    }
+  });
+
+  /**
+   * PUT /api/ext/trading/watchlist/groups/reorder
+   * Reorder watchlist groups
+   * Body: { groupIds: ['id1', 'id2', 'id3'] } - array in new order
+   */
+  fastify.put('/watchlist/groups/reorder', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const { groupIds } = request.body;
+
+      if (!Array.isArray(groupIds) || groupIds.length === 0) {
+        return reply.send({ error: 'groupIds array is required' }, 400);
+      }
+
+      // Update display_order for each group
+      const stmt = db.prepare(
+        'UPDATE trading_watchlist_groups SET display_order = ? WHERE id = ? AND user_id = ?'
+      );
+
+      groupIds.forEach((groupId, index) => {
+        stmt.run(index, groupId, userId);
+      });
+
+      console.log('[Trading]', `Reordered ${groupIds.length} watchlist groups`);
+
+      return reply.send({ success: true });
+    } catch (error) {
+      console.error('[Trading]', `Failed to reorder watchlist groups: ${error.message}`);
+      return reply.send({ error: 'Failed to reorder watchlist groups' }, 500);
+    }
+  });
+
+  /**
+   * PUT /api/ext/trading/watchlist/reorder
+   * Reorder watchlist items within a group
+   * Body: { itemIds: ['id1', 'id2', 'id3'] } - array in new order
+   */
+  fastify.put('/watchlist/reorder', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const { itemIds } = request.body;
+
+      if (!Array.isArray(itemIds) || itemIds.length === 0) {
+        return reply.send({ error: 'itemIds array is required' }, 400);
+      }
+
+      // Update display_order for each item
+      const stmt = db.prepare(
+        'UPDATE trading_watchlist SET display_order = ? WHERE id = ? AND user_id = ?'
+      );
+
+      itemIds.forEach((itemId, index) => {
+        stmt.run(index, itemId, userId);
+      });
+
+      console.log('[Trading]', `Reordered ${itemIds.length} watchlist items`);
+
+      return reply.send({ success: true });
+    } catch (error) {
+      console.error('[Trading]', `Failed to reorder watchlist items: ${error.message}`);
+      return reply.send({ error: 'Failed to reorder watchlist items' }, 500);
+    }
+  });
+
+  // ============================================================================
+  // PRICE ALERTS
+  // ============================================================================
+
+  /**
+   * GET /api/ext/trading/alerts
+   * Get all price alerts for user
+   */
+  fastify.get('/alerts', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+
+      const alerts = db
+        .prepare(
+          `
+        SELECT id, symbol, asset_class, alert_type, target_price, target_percent,
+               is_active, repeat_alert, notification_channels, last_triggered_at,
+               trigger_count, auto_execute_order, order_config, created_at, expires_at
+        FROM trading_price_alerts
+        WHERE user_id = ?
+        ORDER BY is_active DESC, created_at DESC
+      `
+        )
+        .all(userId);
+
+      // Parse JSON fields
+      const parsedAlerts = alerts.map((alert) => ({
+        ...alert,
+        notification_channels: JSON.parse(alert.notification_channels || '["in_app"]'),
+        order_config: alert.order_config ? JSON.parse(alert.order_config) : null
+      }));
+
+      return reply.send({ alerts: parsedAlerts });
+    } catch (error) {
+      console.error('[Trading]', `Failed to fetch price alerts: ${error.message}`);
+      return reply.send({ error: 'Failed to fetch price alerts' }, 500);
+    }
+  });
+
+  /**
+   * POST /api/ext/trading/alerts
+   * Create new price alert
+   * Body: { symbol, alert_type, target_price?, target_percent?, notification_channels?, ... }
+   */
+  fastify.post('/alerts', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const {
+        symbol,
+        asset_class = 'us_equity',
+        alert_type,
+        target_price,
+        target_percent,
+        repeat_alert = 0,
+        notification_channels = ['in_app'],
+        auto_execute_order = 0,
+        order_config,
+        expires_at
+      } = request.body;
+
+      // Validation
+      if (!symbol || !alert_type) {
+        return reply.send({ error: 'symbol and alert_type are required' }, 400);
+      }
+
+      if (!['above', 'below', 'percent_change'].includes(alert_type)) {
+        return reply.send({ error: 'Invalid alert_type' }, 400);
+      }
+
+      if ((alert_type === 'above' || alert_type === 'below') && !target_price) {
+        return reply.send({ error: 'target_price is required for above/below alerts' }, 400);
+      }
+
+      if (alert_type === 'percent_change' && !target_percent) {
+        return reply.send({ error: 'target_percent is required for percent_change alerts' }, 400);
+      }
+
+      const id = randomBytes(16).toString('hex');
+      const now = new Date().toISOString();
+
+      db.prepare(
+        `
+        INSERT INTO trading_price_alerts (
+          id, user_id, symbol, asset_class, alert_type, target_price, target_percent,
+          is_active, repeat_alert, notification_channels, auto_execute_order, order_config,
+          created_at, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+      ).run(
+        id,
+        userId,
+        symbol.toUpperCase(),
+        asset_class,
+        alert_type,
+        target_price || null,
+        target_percent || null,
+        1,
+        repeat_alert,
+        JSON.stringify(notification_channels),
+        auto_execute_order,
+        order_config ? JSON.stringify(order_config) : null,
+        now,
+        expires_at || null
+      );
+
+      console.log('[Trading]', `Created price alert: ${symbol} ${alert_type}`);
+
+      return reply.send({
+        success: true,
+        alert: {
+          id,
+          symbol: symbol.toUpperCase(),
+          asset_class,
+          alert_type,
+          target_price,
+          target_percent,
+          is_active: 1,
+          created_at: now
+        }
+      });
+    } catch (error) {
+      console.error('[Trading]', `Failed to create price alert: ${error.message}`);
+      return reply.send({ error: 'Failed to create price alert' }, 500);
+    }
+  });
+
+  /**
+   * PUT /api/ext/trading/alerts/:id
+   * Update price alert (toggle active, update target, etc.)
+   */
+  fastify.put('/alerts/:id', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const alertId = request.params('id');
+      const { is_active, target_price, target_percent, notification_channels } = request.body;
+
+      // Check ownership
+      const alert = db
+        .prepare('SELECT id FROM trading_price_alerts WHERE id = ? AND user_id = ?')
+        .get(alertId, userId);
+
+      if (!alert) {
+        return reply.send({ error: 'Price alert not found' }, 404);
+      }
+
+      const updates = [];
+      const params = [];
+
+      if (is_active !== undefined) {
+        updates.push('is_active = ?');
+        params.push(is_active ? 1 : 0);
+      }
+      if (target_price !== undefined) {
+        updates.push('target_price = ?');
+        params.push(target_price);
+      }
+      if (target_percent !== undefined) {
+        updates.push('target_percent = ?');
+        params.push(target_percent);
+      }
+      if (notification_channels !== undefined) {
+        updates.push('notification_channels = ?');
+        params.push(JSON.stringify(notification_channels));
+      }
+
+      if (updates.length === 0) {
+        return reply.send({ error: 'No fields to update' }, 400);
+      }
+
+      params.push(alertId, userId);
+
+      db.prepare(
+        `UPDATE trading_price_alerts SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`
+      ).run(...params);
+
+      console.log('[Trading]', `Updated price alert: ${alertId}`);
+
+      return reply.send({ success: true });
+    } catch (error) {
+      console.error('[Trading]', `Failed to update price alert: ${error.message}`);
+      return reply.send({ error: 'Failed to update price alert' }, 500);
+    }
+  });
+
+  /**
+   * DELETE /api/ext/trading/alerts/:id
+   * Delete price alert
+   */
+  fastify.delete('/alerts/:id', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const alertId = request.params('id');
+
+      db.prepare('DELETE FROM trading_price_alerts WHERE id = ? AND user_id = ?').run(
+        alertId,
+        userId
+      );
+
+      console.log('[Trading]', `Deleted price alert: ${alertId}`);
+
+      return reply.send({ success: true });
+    } catch (error) {
+      console.error('[Trading]', `Failed to delete price alert: ${error.message}`);
+      return reply.send({ error: 'Failed to delete price alert' }, 500);
+    }
+  });
+
+  // ============================================================================
+  // IMPORT/EXPORT
+  // ============================================================================
+
+  /**
+   * GET /api/ext/trading/watchlist/export
+   * Export watchlist as CSV
+   * Query: ?groupId=xxx (optional - export specific group, or all if omitted)
+   */
+  fastify.get('/watchlist/export', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const groupId = request.query('groupId');
+
+      let query = `
+        SELECT w.symbol, w.asset_class, w.name, w.notes, g.name as group_name
+        FROM trading_watchlist w
+        LEFT JOIN trading_watchlist_groups g ON w.watchlist_group_id = g.id
+        WHERE w.user_id = ?
+      `;
+
+      const params = [userId];
+
+      if (groupId) {
+        query += ' AND w.watchlist_group_id = ?';
+        params.push(groupId);
+      }
+
+      query += ' ORDER BY w.display_order ASC';
+
+      const items = db.prepare(query).all(...params);
+
+      // Generate CSV
+      const csvLines = ['Symbol,Asset Class,Name,Notes,Watchlist'];
+
+      items.forEach((item) => {
+        const line = [
+          item.symbol || '',
+          item.asset_class || '',
+          item.name || '',
+          (item.notes || '').replace(/"/g, '""'), // Escape quotes
+          item.group_name || ''
+        ].map((field) => `"${field}"`);
+
+        csvLines.push(line.join(','));
+      });
+
+      const csvContent = csvLines.join('\n');
+
+      reply.raw.setHeader('Content-Type', 'text/csv');
+      reply.raw.setHeader(
+        'Content-Disposition',
+        `attachment; filename="watchlist_${new Date().toISOString().split('T')[0]}.csv"`
+      );
+
+      return reply.send(csvContent);
+    } catch (error) {
+      console.error('[Trading]', `Failed to export watchlist: ${error.message}`);
+      return reply.send({ error: 'Failed to export watchlist' }, 500);
+    }
+  });
+
+  /**
+   * POST /api/ext/trading/watchlist/import
+   * Import watchlist from CSV
+   * Body: { csv: string, groupId?: string } - CSV content and target group ID
+   */
+  fastify.post('/watchlist/import', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const { csv, groupId } = request.body;
+
+      if (!csv || typeof csv !== 'string') {
+        return reply.send({ error: 'CSV content is required' }, 400);
+      }
+
+      // Verify group ownership if groupId provided
+      if (groupId) {
+        const group = db
+          .prepare('SELECT id FROM trading_watchlist_groups WHERE id = ? AND user_id = ?')
+          .get(groupId, userId);
+
+        if (!group) {
+          return reply.send({ error: 'Watchlist group not found' }, 404);
+        }
+      }
+
+      // Parse CSV (simple parser - expects Symbol,Asset Class,Name,Notes format)
+      const lines = csv.split('\n').filter((line) => line.trim().length > 0);
+
+      if (lines.length < 2) {
+        return reply.send({ error: 'CSV file is empty or invalid' }, 400);
+      }
+
+      // Skip header
+      const dataLines = lines.slice(1);
+
+      let successCount = 0;
+      let failCount = 0;
+      const errors = [];
+
+      const stmt = db.prepare(
+        `
+        INSERT OR IGNORE INTO trading_watchlist (
+          id, user_id, symbol, asset_class, name, notes, watchlist_group_id, display_order, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+      );
+
+      dataLines.forEach((line, index) => {
+        try {
+          // Parse CSV line (handle quoted fields)
+          const fields = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+          const cleanFields = fields.map((f) => f.replace(/^"|"$/g, '').trim());
+
+          const symbol = cleanFields[0]?.toUpperCase();
+          const asset_class = cleanFields[1] || 'us_equity';
+          const name = cleanFields[2] || null;
+          const notes = cleanFields[3] || null;
+
+          if (!symbol) {
+            errors.push(`Line ${index + 2}: Missing symbol`);
+            failCount++;
+            return;
+          }
+
+          const id = randomBytes(16).toString('hex');
+          const now = new Date().toISOString();
+
+          const result = stmt.run(
+            id,
+            userId,
+            symbol,
+            asset_class,
+            name,
+            notes,
+            groupId || null,
+            index,
+            now
+          );
+
+          if (result.changes > 0) {
+            successCount++;
+          } else {
+            failCount++; // Already exists (OR IGNORE)
+          }
+        } catch (err) {
+          errors.push(`Line ${index + 2}: ${err.message}`);
+          failCount++;
+        }
+      });
+
+      // Log import
+      const importId = randomBytes(16).toString('hex');
+      const now = new Date().toISOString();
+
+      db.prepare(
+        `
+        INSERT INTO trading_watchlist_imports (
+          id, user_id, watchlist_group_id, filename, symbols_count,
+          successful_imports, failed_imports, imported_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+      ).run(importId, userId, groupId || null, 'import.csv', dataLines.length, successCount, failCount, now);
+
+      console.log('[Trading]', `Imported watchlist: ${successCount} success, ${failCount} failed`);
+
+      return reply.send({
+        success: true,
+        successCount,
+        failCount,
+        total: dataLines.length,
+        errors: errors.slice(0, 10) // Limit error messages
+      });
+    } catch (error) {
+      console.error('[Trading]', `Failed to import watchlist: ${error.message}`);
+      return reply.send({ error: 'Failed to import watchlist' }, 500);
+    }
+  });
+
+  // ============================================================================
   // STRATEGIES (AI Trading)
   // ============================================================================
 

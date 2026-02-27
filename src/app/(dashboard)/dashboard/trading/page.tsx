@@ -35,8 +35,9 @@ const TradingViewWidget = dynamic(
   { ssr: false }
 );
 
-// Analytics Tab Component
+// Tab Components
 import { AnalyticsTab } from './analytics-tab';
+import { WatchlistTab } from './watchlist-tab';
 
 /**
  * Trading Dashboard Page
@@ -656,7 +657,7 @@ export default function TradingPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <div className="flex space-x-8">
-          {['positions', 'trade', 'orders', 'strategies', 'analytics'].map((tab) => (
+          {['positions', 'trade', 'orders', 'watchlist', 'strategies', 'analytics'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -681,6 +682,7 @@ export default function TradingPage() {
           <TradeTab onPlaceOrder={handlePlaceOrder} watchlist={watchlist} portfolio={portfolio} />
         )}
         {activeTab === 'orders' && <OrdersTab orders={orders} onCancel={handleCancelOrder} />}
+        {activeTab === 'watchlist' && <WatchlistTab priceUpdates={realtimePrices} />}
         {activeTab === 'strategies' && (
           <StrategiesTab
             strategies={strategies}
