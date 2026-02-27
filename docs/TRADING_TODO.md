@@ -23,11 +23,20 @@ Tasks to enhance the Trading Extension UI/UX to match professional trading platf
 
 **Error 2**: "[WebSocket] Connection error"
 - **Location**: `trading/page.tsx:166` in WebSocket useEffect
-- **Cause**: SQL query error - `trading_watchlist` table uses `user_id`, not `trading_account_id`
-- **Fix**: Corrected watchlist query in `/stream` endpoint from `trading_account_id` to `user_id`
-- **Result**: WebSocket real-time price updates now connect successfully
+- **Cause 1**: SQL query error - `trading_watchlist` table uses `user_id`, not `trading_account_id`
+- **Cause 2**: Alpaca WebSocket errors were crashing the SSE connection silently
+- **Fix 1**: Corrected watchlist query in `/stream` endpoint from `trading_account_id` to `user_id`
+- **Fix 2**: Enhanced error handling:
+  - Send "connected" event before Alpaca WebSocket creation
+  - Added heartbeat keepalive (30s) to prevent timeouts
+  - Wrapped Alpaca connection in try-catch
+  - Send error events to frontend instead of crashing
+  - Frontend displays Alpaca errors as toast notifications
+- **Result**: WebSocket connects successfully with graceful error handling
 
-**Commit**: `bd17cd18d` - "Fix trading extension API errors"
+**Commits**:
+- `bd17cd18d` - "Fix trading extension API errors" (SQL query fix)
+- `f635d61d0` - "Improve WebSocket error handling" (Enhanced error handling)
 
 ---
 
