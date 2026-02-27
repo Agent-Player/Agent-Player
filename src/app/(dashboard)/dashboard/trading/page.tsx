@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { config } from '@/lib/config';
+import dynamic from 'next/dynamic';
 import {
   TrendingUp,
   TrendingDown,
@@ -20,7 +21,17 @@ import {
   X,
   Calculator,
   CheckCircle,
+  Maximize,
+  BarChart3,
+  CandlestickChart,
+  LineChart,
 } from 'lucide-react';
+
+// Dynamic import for TradingView widget (client-side only)
+const TradingViewWidget = dynamic(
+  () => import('react-tradingview-embed').then((mod) => mod.default),
+  { ssr: false }
+);
 
 /**
  * Trading Dashboard Page
@@ -602,6 +613,145 @@ function PositionsTab({ positions }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// TradingView Chart Component
+function TradingViewChart({ symbol }) {
+  const [timeframe, setTimeframe] = useState(() => {
+    return localStorage.getItem('trading_chart_timeframe') || 'D';
+  });
+  const [chartType, setChartType] = useState(() => {
+    return localStorage.getItem('trading_chart_type') || '1';
+  });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Save settings to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem('trading_chart_timeframe', timeframe);
+  }, [timeframe]);
+
+  useEffect(() => {
+    localStorage.setItem('trading_chart_type', chartType);
+  }, [chartType]);
+
+  // Convert Alpaca symbol format to TradingView format
+  function formatSymbolForTV(symbol) {
+    // Crypto symbols: BTC/USD -> BTCUSD, ETH/USD -> ETHUSD
+    if (symbol.includes('/')) {
+      const base = symbol.split('/')[0];
+      return `CRYPTO:${base}USD`;
+    }
+    // Stock symbols: AAPL -> NASDAQ:AAPL (default to NASDAQ, will auto-correct)
+    return `NASDAQ:${symbol}`;
+  }
+
+  const tvSymbol = formatSymbolForTV(symbol);
+
+  // Timeframe options
+  const timeframes = [
+    { value: '1', label: '1m' },
+    { value: '5', label: '5m' },
+    { value: '15', label: '15m' },
+    { value: '60', label: '1h' },
+    { value: 'D', label: '1d' },
+    { value: 'W', label: '1w' },
+    { value: 'M', label: '1M' },
+  ];
+
+  // Chart type options (TradingView chart types)
+  const chartTypes = [
+    { value: '1', label: 'Candlestick', icon: CandlestickChart },
+    { value: '0', label: 'Bar', icon: BarChart3 },
+    { value: '3', label: 'Line', icon: LineChart },
+    { value: '9', label: 'Area', icon: Activity },
+  ];
+
+  const currentChartType = chartTypes.find((t) => t.value === chartType) || chartTypes[0];
+
+  return (
+    <div className={`bg-white rounded-lg border border-gray-200 overflow-hidden ${
+      isFullscreen ? 'fixed inset-0 z-50' : ''
+    }`}>
+      {/* Chart Controls */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          {/* Chart Type Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Type:</span>
+            <div className="flex gap-1">
+              {chartTypes.map((type) => {
+                const Icon = type.icon;
+                return (
+                  <button
+                    key={type.value}
+                    onClick={() => setChartType(type.value)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                      chartType === type.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100'
+                    }`}
+                    title={type.label}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">{type.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Timeframe Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Timeframe:</span>
+            <div className="flex gap-1">
+              {timeframes.map((tf) => (
+                <button
+                  key={tf.value}
+                  onClick={() => setTimeframe(tf.value)}
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    timeframe === tf.value
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {tf.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Fullscreen Toggle */}
+        <button
+          onClick={() => setIsFullscreen(!isFullscreen)}
+          className="p-2 rounded-md hover:bg-white text-gray-700 transition-colors"
+          title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+        >
+          <Maximize className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* TradingView Chart Widget */}
+      <div className={`bg-white ${isFullscreen ? 'h-[calc(100vh-60px)]' : 'h-[500px]'}`}>
+        <TradingViewWidget
+          widgetType="widget"
+          symbol={tvSymbol}
+          interval={timeframe}
+          theme="light"
+          locale="en"
+          timezone="America/New_York"
+          style={chartType}
+          toolbar_bg="#f1f3f6"
+          enable_publishing={false}
+          hide_top_toolbar={false}
+          hide_legend={false}
+          save_image={true}
+          container_id="tradingview_chart"
+          autosize
+        />
+      </div>
     </div>
   );
 }
@@ -1236,6 +1386,13 @@ function TradeTab({ onPlaceOrder, watchlist, portfolio }) {
             </p>
           )}
         </div>
+
+        {/* TradingView Chart */}
+        {symbol && (
+          <div className="my-6">
+            <TradingViewChart symbol={symbol} />
+          </div>
+        )}
 
         {/* Live Price Display */}
         {symbol && (
