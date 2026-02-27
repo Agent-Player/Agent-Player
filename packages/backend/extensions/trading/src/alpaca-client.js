@@ -126,7 +126,7 @@ export async function getOrders(alpaca, status = 'all', limit = 50) {
  */
 export async function placeOrder(alpaca, orderParams) {
   try {
-    const order = await alpaca.createOrder({
+    const orderData = {
       symbol: orderParams.symbol,
       qty: orderParams.qty,
       side: orderParams.side, // 'buy' or 'sell'
@@ -134,7 +134,41 @@ export async function placeOrder(alpaca, orderParams) {
       time_in_force: orderParams.time_in_force || 'day',
       limit_price: orderParams.limit_price,
       stop_price: orderParams.stop_price,
-    });
+    };
+
+    // Advanced Order Types
+    if (orderParams.order_class) {
+      orderData.order_class = orderParams.order_class;
+    }
+
+    // Bracket Order: Take Profit + Stop Loss
+    if (orderParams.order_class === 'bracket') {
+      if (orderParams.take_profit) {
+        orderData.take_profit = orderParams.take_profit;
+      }
+      if (orderParams.stop_loss) {
+        orderData.stop_loss = orderParams.stop_loss;
+      }
+    }
+
+    // Trailing Stop
+    if (orderParams.order_class === 'trailing_stop') {
+      if (orderParams.trail_amount) {
+        orderData.trail_amount = orderParams.trail_amount;
+      } else if (orderParams.trail_percent) {
+        orderData.trail_percent = orderParams.trail_percent;
+      }
+    }
+
+    // OCO (One-Cancels-Other) - Note: Alpaca SDK might not directly support OCO
+    // This would need to be handled by placing two separate orders and managing cancellation
+    if (orderParams.order_class === 'oco' && orderParams.oco_order) {
+      // For now, we'll place the primary order
+      // TODO: Implement OCO logic by placing second order and linking them
+      console.warn('[Alpaca] OCO orders require custom implementation');
+    }
+
+    const order = await alpaca.createOrder(orderData);
 
     return {
       id: order.id,
@@ -143,6 +177,7 @@ export async function placeOrder(alpaca, orderParams) {
       qty: parseFloat(order.qty),
       side: order.side,
       order_type: order.type,
+      order_class: order.order_class || 'simple',
       status: order.status,
       submitted_at: order.submitted_at,
     };

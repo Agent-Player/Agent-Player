@@ -1736,6 +1736,66 @@ function OrderPreviewModal({ isOpen, onClose, onConfirm, preview, submitting }) 
               </div>
             )}
 
+            {/* Advanced Order Class */}
+            {preview.order_class && preview.order_class !== 'simple' && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Order Class:</span>
+                <span className="text-base font-medium text-blue-600 capitalize">
+                  {preview.order_class.replace('_', ' ')}
+                </span>
+              </div>
+            )}
+
+            {/* Bracket Order Details */}
+            {preview.order_class === 'bracket' && (
+              <div className="bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                <div className="font-semibold text-sm text-gray-700">Bracket Order Levels:</div>
+                {preview.take_profit && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-green-700">Take Profit:</span>
+                    <span className="font-mono font-semibold text-green-700">
+                      ${preview.take_profit.limit_price.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                {preview.stop_loss && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-red-700">Stop Loss:</span>
+                    <span className="font-mono font-semibold text-red-700">
+                      ${preview.stop_loss.stop_price.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Trailing Stop Details */}
+            {preview.order_class === 'trailing_stop' && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                <div className="font-semibold text-sm text-purple-900 mb-1">Trailing Stop:</div>
+                {preview.trail_amount && (
+                  <div className="text-sm text-purple-700">
+                    Trail by: <span className="font-mono font-semibold">${preview.trail_amount.toFixed(2)}</span>
+                  </div>
+                )}
+                {preview.trail_percent && (
+                  <div className="text-sm text-purple-700">
+                    Trail by: <span className="font-mono font-semibold">{preview.trail_percent}%</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* OCO Order Details */}
+            {preview.order_class === 'oco' && preview.oco_order && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                <div className="font-semibold text-sm text-orange-900 mb-1">OCO (One-Cancels-Other):</div>
+                <div className="text-sm text-orange-700">
+                  Second Order: <span className="capitalize font-semibold">{preview.oco_order.type}</span> @ <span className="font-mono">${preview.oco_order.price.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+
             {/* Estimated Cost */}
             <div className="flex justify-between items-center pt-3 border-t border-gray-100">
               <span className="text-sm font-medium text-gray-700">Estimated Cost:</span>
@@ -1912,6 +1972,15 @@ function TradeTab({ onPlaceOrder, watchlist, portfolio }) {
   const [showPreview, setShowPreview] = useState(false);
   const [orderPreview, setOrderPreview] = useState(null);
 
+  // Advanced Order Types State
+  const [orderClass, setOrderClass] = useState('simple'); // simple, bracket, trailing_stop, oco
+  const [takeProfitPrice, setTakeProfitPrice] = useState('');
+  const [stopLossPrice, setStopLossPrice] = useState('');
+  const [trailAmount, setTrailAmount] = useState('');
+  const [trailPercent, setTrailPercent] = useState('');
+  const [ocoOrderType, setOcoOrderType] = useState('limit');
+  const [ocoPrice, setOcoPrice] = useState('');
+
   // Show preview dialog instead of placing order directly
   async function handleSubmit(e) {
     e.preventDefault();
@@ -1929,9 +1998,21 @@ function TradeTab({ onPlaceOrder, watchlist, portfolio }) {
       order_type: orderType,
       time_in_force: timeInForce,
       limit_price: limitPrice ? parseFloat(limitPrice) : null,
+      stop_price: (orderType === 'stop' || orderType === 'stop_limit') && stopLossPrice ? parseFloat(stopLossPrice) : null,
       current_price: currentPrice,
       estimated_cost: estimatedCost,
       buying_power: portfolio?.buying_power || 0,
+
+      // Advanced order class
+      order_class: orderClass,
+      take_profit: orderClass === 'bracket' && takeProfitPrice ? { limit_price: parseFloat(takeProfitPrice) } : null,
+      stop_loss: orderClass === 'bracket' && stopLossPrice ? { stop_price: parseFloat(stopLossPrice) } : null,
+      trail_amount: orderClass === 'trailing_stop' && trailAmount ? parseFloat(trailAmount) : null,
+      trail_percent: orderClass === 'trailing_stop' && trailPercent ? parseFloat(trailPercent) : null,
+      oco_order: orderClass === 'oco' && ocoPrice ? {
+        type: ocoOrderType,
+        price: parseFloat(ocoPrice)
+      } : null,
     };
 
     setOrderPreview(preview);
@@ -1944,20 +2025,50 @@ function TradeTab({ onPlaceOrder, watchlist, portfolio }) {
     setShowPreview(false);
 
     try {
-      await onPlaceOrder({
+      const orderData = {
         symbol: orderPreview.symbol,
         qty: orderPreview.qty,
         side: orderPreview.side,
         order_type: orderPreview.order_type,
         limit_price: orderPreview.limit_price || undefined,
+        stop_price: orderPreview.stop_price || undefined,
         time_in_force: orderPreview.time_in_force,
-      });
+        order_class: orderPreview.order_class !== 'simple' ? orderPreview.order_class : undefined,
+      };
+
+      // Add bracket order parameters
+      if (orderPreview.order_class === 'bracket') {
+        orderData.take_profit = orderPreview.take_profit;
+        orderData.stop_loss = orderPreview.stop_loss;
+      }
+
+      // Add trailing stop parameters
+      if (orderPreview.order_class === 'trailing_stop') {
+        if (orderPreview.trail_amount) {
+          orderData.trail_amount = orderPreview.trail_amount;
+        } else if (orderPreview.trail_percent) {
+          orderData.trail_percent = orderPreview.trail_percent;
+        }
+      }
+
+      // Add OCO parameters
+      if (orderPreview.order_class === 'oco') {
+        orderData.oco_order = orderPreview.oco_order;
+      }
+
+      await onPlaceOrder(orderData);
 
       // Reset form
       setSymbol('');
       setQty('1');
       setLimitPrice('');
+      setStopLossPrice('');
       setTimeInForce('day');
+      setOrderClass('simple');
+      setTakeProfitPrice('');
+      setTrailAmount('');
+      setTrailPercent('');
+      setOcoPrice('');
       setOrderPreview(null);
     } catch (error) {
       // Error already handled by parent
@@ -2055,6 +2166,8 @@ function TradeTab({ onPlaceOrder, watchlist, portfolio }) {
             >
               <option value="market">Market</option>
               <option value="limit">Limit</option>
+              <option value="stop">Stop</option>
+              <option value="stop_limit">Stop Limit</option>
             </select>
           </div>
 
@@ -2073,7 +2186,197 @@ function TradeTab({ onPlaceOrder, watchlist, portfolio }) {
               />
             </div>
           )}
+
+          {orderType === 'stop' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Stop Price</label>
+              <input
+                type="number"
+                value={stopLossPrice}
+                onChange={(e) => setStopLossPrice(e.target.value)}
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required={orderType === 'stop'}
+              />
+            </div>
+          )}
+
+          {orderType === 'stop_limit' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Stop Price</label>
+                <input
+                  type="number"
+                  value={stopLossPrice}
+                  onChange={(e) => setStopLossPrice(e.target.value)}
+                  min="0.01"
+                  step="0.01"
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required={orderType === 'stop_limit'}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Limit Price</label>
+                <input
+                  type="number"
+                  value={limitPrice}
+                  onChange={(e) => setLimitPrice(e.target.value)}
+                  min="0.01"
+                  step="0.01"
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required={orderType === 'stop_limit'}
+                />
+              </div>
+            </>
+          )}
         </div>
+
+        {/* Advanced Order Class */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Order Class</label>
+          <select
+            value={orderClass}
+            onChange={(e) => setOrderClass(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="simple">Simple Order</option>
+            <option value="bracket">Bracket Order (Take Profit + Stop Loss)</option>
+            <option value="trailing_stop">Trailing Stop</option>
+            <option value="oco">OCO (One-Cancels-Other)</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500">
+            {orderClass === 'simple' && 'Standard order execution'}
+            {orderClass === 'bracket' && 'Set both take profit and stop loss levels simultaneously'}
+            {orderClass === 'trailing_stop' && 'Stop loss that follows price movement'}
+            {orderClass === 'oco' && 'Place two orders; if one executes, the other is canceled'}
+          </p>
+        </div>
+
+        {/* Bracket Order Fields */}
+        {orderClass === 'bracket' && side === 'buy' && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+            <h4 className="font-semibold text-sm text-blue-900">Bracket Order Settings</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-blue-700 mb-1">Take Profit Price</label>
+                <input
+                  type="number"
+                  value={takeProfitPrice}
+                  onChange={(e) => setTakeProfitPrice(e.target.value)}
+                  min="0.01"
+                  step="0.01"
+                  placeholder={currentPrice ? (currentPrice * 1.05).toFixed(2) : '0.00'}
+                  className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required={orderClass === 'bracket'}
+                />
+                <p className="mt-1 text-xs text-blue-600">Sell when price reaches this level (profit)</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-red-700 mb-1">Stop Loss Price</label>
+                <input
+                  type="number"
+                  value={stopLossPrice}
+                  onChange={(e) => setStopLossPrice(e.target.value)}
+                  min="0.01"
+                  step="0.01"
+                  placeholder={currentPrice ? (currentPrice * 0.95).toFixed(2) : '0.00'}
+                  className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  required={orderClass === 'bracket'}
+                />
+                <p className="mt-1 text-xs text-red-600">Sell when price drops to this level (protection)</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Trailing Stop Fields */}
+        {orderClass === 'trailing_stop' && (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+            <h4 className="font-semibold text-sm text-purple-900">Trailing Stop Settings</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-purple-700 mb-1">Trail Amount ($)</label>
+                <input
+                  type="number"
+                  value={trailAmount}
+                  onChange={(e) => {
+                    setTrailAmount(e.target.value);
+                    setTrailPercent(''); // Clear percent when amount is set
+                  }}
+                  min="0.01"
+                  step="0.01"
+                  placeholder="5.00"
+                  className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  disabled={!!trailPercent}
+                />
+                <p className="mt-1 text-xs text-purple-600">Fixed dollar amount to trail</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-purple-700 mb-1">Trail Percent (%)</label>
+                <input
+                  type="number"
+                  value={trailPercent}
+                  onChange={(e) => {
+                    setTrailPercent(e.target.value);
+                    setTrailAmount(''); // Clear amount when percent is set
+                  }}
+                  min="0.01"
+                  step="0.01"
+                  max="100"
+                  placeholder="5.0"
+                  className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  disabled={!!trailAmount}
+                />
+                <p className="mt-1 text-xs text-purple-600">Percentage to trail</p>
+              </div>
+            </div>
+            <p className="text-xs text-purple-700 bg-purple-100 p-2 rounded">
+              Stop loss automatically adjusts as price moves in your favor
+            </p>
+          </div>
+        )}
+
+        {/* OCO Order Fields */}
+        {orderClass === 'oco' && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-3">
+            <h4 className="font-semibold text-sm text-orange-900">OCO (One-Cancels-Other) Settings</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-orange-700 mb-1">Second Order Type</label>
+                <select
+                  value={ocoOrderType}
+                  onChange={(e) => setOcoOrderType(e.target.value)}
+                  className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                  <option value="limit">Limit</option>
+                  <option value="stop">Stop</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-orange-700 mb-1">
+                  {ocoOrderType === 'limit' ? 'Limit Price' : 'Stop Price'}
+                </label>
+                <input
+                  type="number"
+                  value={ocoPrice}
+                  onChange={(e) => setOcoPrice(e.target.value)}
+                  min="0.01"
+                  step="0.01"
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  required={orderClass === 'oco'}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-orange-700 bg-orange-100 p-2 rounded">
+              When one order executes, the other is automatically canceled
+            </p>
+          </div>
+        )}
 
         {/* Time in Force */}
         <div>
