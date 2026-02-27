@@ -408,3 +408,48 @@ export async function testCredentials(apiKey, apiSecret, mode = 'paper') {
     };
   }
 }
+
+/**
+ * Get news articles
+ * @param {Alpaca} alpaca - Alpaca client instance
+ * @param {Object} options - { symbols?, start?, end?, limit?, sort?, include_content? }
+ * @returns {Promise<Array>} News articles
+ */
+export async function getNews(alpaca, options = {}) {
+  try {
+    const { symbols, start, end, limit = 50, sort = 'desc', include_content = false } = options;
+
+    const params = {
+      limit,
+      sort,
+      include_content,
+    };
+
+    if (symbols && symbols.length > 0) {
+      params.symbols = Array.isArray(symbols) ? symbols.join(',') : symbols;
+    }
+
+    if (start) params.start = start;
+    if (end) params.end = end;
+
+    // Use Alpaca SDK's getNews method
+    const news = await alpaca.getNews(params);
+
+    return news.map((article) => ({
+      id: article.id || article.article_id,
+      headline: article.headline,
+      summary: article.summary || '',
+      author: article.author || 'Benzinga',
+      created_at: article.created_at,
+      updated_at: article.updated_at,
+      url: article.url,
+      content: article.content || null,
+      images: article.images || [],
+      symbols: article.symbols || [],
+      source: article.source || 'Benzinga',
+    }));
+  } catch (error) {
+    console.error('[Alpaca] Failed to fetch news:', error);
+    throw new Error(`Alpaca News API error: ${error.message}`);
+  }
+}

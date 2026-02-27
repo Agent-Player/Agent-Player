@@ -23,6 +23,7 @@ import {
   getHistoricalBars,
   testCredentials,
   createRealtimeConnection,
+  getNews,
 } from './alpaca-client.js';
 import { randomBytes } from 'crypto';
 import { getCredentialManager } from '../../../src/credentials/index.js';
@@ -1720,6 +1721,194 @@ export async function registerTradingRoutes(fastify) {
     } catch (error) {
       console.error('[Trading]', `Failed to import watchlist: ${error.message}`);
       return reply.send({ error: 'Failed to import watchlist' }, 500);
+    }
+  });
+
+  // ============================================================================
+  // NEWS FEED
+  // ============================================================================
+
+  /**
+   * GET /api/ext/trading/news
+   * Get latest news articles
+   * Query: ?symbols=AAPL,TSLA&limit=50&start=2024-01-01
+   */
+  fastify.get('/news', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+
+      // Get user's trading account for API credentials
+      const account = db
+        .prepare(
+          `
+        SELECT api_key_credential_id, api_secret_credential_id, account_mode
+        FROM trading_accounts
+        WHERE user_id = ? AND is_default = 1 AND is_active = 1
+        LIMIT 1
+      `
+        )
+        .get(userId);
+
+      if (!account) {
+        return reply.send({ error: 'No active trading account found' }, 404);
+      }
+
+      // Decrypt API credentials
+      const apiKey = credentialManager.getValue(account.api_key_credential_id);
+      const apiSecret = credentialManager.getValue(account.api_secret_credential_id);
+
+      if (!apiKey || !apiSecret) {
+        return reply.send({ error: 'Failed to decrypt API credentials' }, 500);
+      }
+
+      // Create Alpaca client
+      const alpaca = createAlpacaClient(apiKey, apiSecret, account.account_mode);
+
+      // Parse query parameters
+      const symbols = request.query('symbols'); // Comma-separated: "AAPL,TSLA"
+      const limit = parseInt(request.query('limit') || '50', 10);
+      const start = request.query('start'); // ISO date
+      const end = request.query('end');
+
+      // Fetch news from Alpaca
+      const news = await getNews(alpaca, {
+        symbols: symbols ? symbols.split(',') : undefined,
+        limit: Math.min(limit, 100), // Cap at 100
+        start,
+        end,
+        include_content: false, // Don't include full article content for performance
+      });
+
+      // Cache news articles in database (async, don't wait)
+      setImmediate(() => {
+        try {
+          const insertStmt = db.prepare(
+            `
+            INSERT OR IGNORE INTO trading_news_articles (
+              article_id, headline, summary, content, author, source, url, images,
+              symbols, created_at, updated_at, fetched_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `
+          );
+
+          const insertSymbolStmt = db.prepare(
+            `INSERT OR IGNORE INTO trading_news_symbols (article_id, symbol) VALUES (?, ?)`
+          );
+
+          news.forEach((article) => {
+            insertStmt.run(
+              article.id,
+              article.headline,
+              article.summary || null,
+              article.content || null,
+              article.author || null,
+              article.source || 'Benzinga',
+              article.url || null,
+              JSON.stringify(article.images || []),
+              JSON.stringify(article.symbols || []),
+              article.created_at,
+              article.updated_at || null
+            );
+
+            // Insert symbol references
+            if (article.symbols && article.symbols.length > 0) {
+              article.symbols.forEach((symbol) => {
+                insertSymbolStmt.run(article.id, symbol);
+              });
+            }
+          });
+        } catch (cacheError) {
+          console.error('[Trading News] Failed to cache articles:', cacheError.message);
+        }
+      });
+
+      return reply.send({ news, count: news.length });
+    } catch (error) {
+      console.error('[Trading]', `Failed to fetch news: ${error.message}`);
+      return reply.send({ error: 'Failed to fetch news' }, 500);
+    }
+  });
+
+  /**
+   * GET /api/ext/trading/news/cached
+   * Get cached news from database (faster, no API call)
+   * Query: ?symbols=AAPL&limit=50
+   */
+  fastify.get('/news/cached', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+
+      const symbols = request.query('symbols'); // Comma-separated or single
+      const limit = parseInt(request.query('limit') || '50', 10);
+
+      let query = `
+        SELECT DISTINCT a.article_id as id, a.headline, a.summary, a.author, a.source,
+               a.url, a.images, a.symbols, a.sentiment, a.sentiment_score, a.created_at
+        FROM trading_news_articles a
+      `;
+
+      const params = [];
+
+      if (symbols) {
+        const symbolList = symbols.split(',').map((s) => s.trim().toUpperCase());
+        query += `
+          INNER JOIN trading_news_symbols ns ON a.article_id = ns.article_id
+          WHERE ns.symbol IN (${symbolList.map(() => '?').join(',')})
+        `;
+        params.push(...symbolList);
+      }
+
+      query += ' ORDER BY a.created_at DESC LIMIT ?';
+      params.push(Math.min(limit, 200));
+
+      const articles = db.prepare(query).all(...params);
+
+      // Parse JSON fields
+      const parsedArticles = articles.map((article) => ({
+        ...article,
+        images: JSON.parse(article.images || '[]'),
+        symbols: JSON.parse(article.symbols || '[]'),
+      }));
+
+      return reply.send({ news: parsedArticles, count: parsedArticles.length, cached: true });
+    } catch (error) {
+      console.error('[Trading]', `Failed to fetch cached news: ${error.message}`);
+      return reply.send({ error: 'Failed to fetch cached news' }, 500);
+    }
+  });
+
+  /**
+   * GET /api/ext/trading/news/trending
+   * Get trending symbols from recent news
+   */
+  fastify.get('/news/trending', async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const limit = parseInt(request.query('limit') || '10', 10);
+
+      // Get most mentioned symbols in last 24 hours
+      const cutoff = new Date();
+      cutoff.setHours(cutoff.getHours() - 24);
+      const cutoffISO = cutoff.toISOString();
+
+      const trending = db
+        .prepare(
+          `
+        SELECT ns.symbol, COUNT(*) as mention_count
+        FROM trading_news_symbols ns
+        INNER JOIN trading_news_articles a ON ns.article_id = a.article_id
+        WHERE a.created_at >= ?
+        GROUP BY ns.symbol
+        ORDER BY mention_count DESC
+        LIMIT ?
+      `
+        )
+        .all(cutoffISO, limit);
+
+      return reply.send({ trending });
+    } catch (error) {
+      console.error('[Trading]', `Failed to fetch trending symbols: ${error.message}`);
+      return reply.send({ error: 'Failed to fetch trending symbols' }, 500);
     }
   });
 
