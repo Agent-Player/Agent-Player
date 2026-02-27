@@ -1705,30 +1705,59 @@ export async function registerTradingRoutes(fastify) {
       reply.raw.setHeader('Cache-Control', 'no-cache');
       reply.raw.setHeader('Connection', 'keep-alive');
 
-      // Create WebSocket connection
-      const wsConnection = createRealtimeConnection(
-        apiKey,
-        apiSecret,
-        symbols,
-        (update) => {
-          // Send SSE event to frontend
-          reply.raw.write(`data: ${JSON.stringify(update)}\n\n`);
-        }
-      );
-
       // Send initial connection event
       reply.raw.write(`data: ${JSON.stringify({ type: 'connected', symbols })}\n\n`);
+
+      // Keep connection alive with heartbeat
+      const heartbeat = setInterval(() => {
+        reply.raw.write(`:heartbeat\n\n`);
+      }, 30000); // Every 30 seconds
+
+      // Create WebSocket connection with error handling
+      let wsConnection;
+      try {
+        wsConnection = createRealtimeConnection(
+          apiKey,
+          apiSecret,
+          symbols,
+          (update) => {
+            try {
+              // Send SSE event to frontend
+              reply.raw.write(`data: ${JSON.stringify(update)}\n\n`);
+            } catch (writeError) {
+              console.error('[Trading WebSocket] Failed to write SSE event:', writeError.message);
+            }
+          }
+        );
+
+        console.log('[Trading WebSocket] Successfully connected to Alpaca');
+      } catch (wsError) {
+        console.error('[Trading WebSocket] Alpaca connection failed:', wsError.message);
+        // Send error event to frontend
+        reply.raw.write(`data: ${JSON.stringify({
+          type: 'error',
+          message: 'Alpaca WebSocket connection failed. Real-time updates disabled.',
+          error: wsError.message
+        })}\n\n`);
+      }
 
       // Handle client disconnect
       request.raw.on('close', () => {
         console.log('[Trading WebSocket] Client disconnected, closing WebSocket');
-        wsConnection.close();
+        clearInterval(heartbeat);
+        if (wsConnection) {
+          wsConnection.close();
+        }
       });
 
     } catch (error) {
       console.error('[Trading WebSocket]', `Stream error: ${error.message}`);
-      reply.code(500);
-      return reply.send({ error: 'Failed to start real-time stream' });
+
+      // If headers not sent yet, send error response
+      if (!reply.raw.headersSent) {
+        reply.code(500);
+        return reply.send({ error: 'Failed to start real-time stream' });
+      }
     }
   });
 

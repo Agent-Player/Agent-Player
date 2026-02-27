@@ -123,7 +123,11 @@ export default function TradingPage() {
 
         if (update.type === 'connected') {
           console.log('[WebSocket] Subscribed to symbols:', update.symbols);
-          toast.success('Real-time updates connected');
+          toast.success(`Real-time updates connected (${update.symbols.length} symbols)`);
+        } else if (update.type === 'error') {
+          console.error('[WebSocket] Alpaca error:', update.message);
+          setWsError(update.message);
+          toast.error(update.message);
         } else if (update.type === 'trade' || update.type === 'quote') {
           // Update real-time prices
           setRealtimePrices((prev) => ({
