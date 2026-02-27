@@ -2654,9 +2654,9 @@ export async function registerTradingRoutes(fastify) {
   // ============================================================================
 
   // 1. GET Options Chain for Symbol
-  fastify.get('/api/ext/trading/options/chain/:symbol', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/api/ext/trading/options/chain/:symbol', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
       const { symbol } = request.params;
       const { expirationDate, strikePrice, optionType } = request.query;
 
@@ -2726,9 +2726,9 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 2. GET Expiration Dates for Symbol
-  fastify.get('/api/ext/trading/options/expirations/:symbol', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/api/ext/trading/options/expirations/:symbol', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
       const { symbol } = request.params;
 
       // Get active trading account
@@ -2763,9 +2763,9 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 3. GET Specific Option Contract
-  fastify.get('/api/ext/trading/options/contract/:optionSymbol', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/api/ext/trading/options/contract/:optionSymbol', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
       const { optionSymbol } = request.params;
 
       // Get active trading account
@@ -2800,9 +2800,9 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 4. POST Place Options Order
-  fastify.post('/api/ext/trading/options/orders', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/api/ext/trading/options/orders', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
       const { optionSymbol, qty, side, orderType, limitPrice } = request.body;
 
       // Validate input
@@ -2891,9 +2891,9 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 5. GET Options Orders History
-  fastify.get('/api/ext/trading/options/orders', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/api/ext/trading/options/orders', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
       const { status, limit = 50 } = request.query;
 
       // Get active trading account
@@ -2931,9 +2931,9 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 6. GET Current Options Positions
-  fastify.get('/api/ext/trading/options/positions', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/api/ext/trading/options/positions', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
 
       // Get active trading account
       const account = db.prepare(`
@@ -3006,7 +3006,7 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 7. POST Calculate Greeks for Contract
-  fastify.post('/api/ext/trading/options/greeks', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/api/ext/trading/options/greeks', async (request, reply) => {
     try {
       const {
         spotPrice,
@@ -3044,9 +3044,9 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 8. GET Saved Strategies
-  fastify.get('/api/ext/trading/options/strategies', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/api/ext/trading/options/strategies', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
 
       // Get active trading account
       const account = db.prepare(`
@@ -3078,9 +3078,9 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 9. POST Create New Strategy
-  fastify.post('/api/ext/trading/options/strategies', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/api/ext/trading/options/strategies', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
       const { name, strategyType, legs, notes } = request.body;
 
       if (!name || !strategyType || !legs || !Array.isArray(legs)) {
@@ -3146,9 +3146,9 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 10. PUT Update Strategy
-  fastify.put('/api/ext/trading/options/strategies/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.put('/api/ext/trading/options/strategies/:id', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
       const { id } = request.params;
       const { name, legs, status, notes } = request.body;
 
@@ -3235,9 +3235,9 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 11. DELETE Strategy
-  fastify.delete('/api/ext/trading/options/strategies/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.delete('/api/ext/trading/options/strategies/:id', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
       const { id } = request.params;
 
       // Get active trading account
@@ -3270,9 +3270,9 @@ export async function registerTradingRoutes(fastify) {
   });
 
   // 12. GET Options Analytics
-  fastify.get('/api/ext/trading/options/analytics', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/api/ext/trading/options/analytics', async (request, reply) => {
     try {
-      const userId = getUserIdFromRequest(request);
+      const userId = getUserId(request);
       const { period = '30d' } = request.query;
 
       // Get active trading account

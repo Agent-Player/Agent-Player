@@ -330,7 +330,9 @@ export function OptionsTab() {
       </div>
 
       {/* Search & Filters (only show for chain tab) */}
-      {subTab === 'chain' && (<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {subTab === 'chain' && (
+      <>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* Symbol Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -529,6 +531,7 @@ export function OptionsTab() {
           Ensure you understand the risks before trading. Click on a contract to view details and place orders.
         </div>
       </div>
+      </>
       )}
 
       {/* Positions Tab */}
