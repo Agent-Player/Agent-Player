@@ -164,22 +164,35 @@ Tasks to enhance the Trading Extension UI/UX to match professional trading platf
 ---
 
 ### 7. Enhanced Positions Table
-**Status**: ❌ Not Started
-**Estimated Time**: 2-3 hours
-**Files to Modify**:
+**Status**: ✅ COMPLETE (2026-02-27)
+**Actual Time**: 2.5 hours
+**Files Modified**:
 - `src/app/(dashboard)/dashboard/trading/page.tsx`
 
 **Requirements**:
-- [ ] Add Cost Basis column
-- [ ] Add Today's P/L column (separate from Total P/L)
-- [ ] Color code P/L (green/red)
-- [ ] Quick action buttons:
+- [x] Add Cost Basis column
+- [x] Add Today's P/L column (separate from Total P/L)
+- [x] Color code P/L (green/red)
+- [x] Quick action buttons:
   - Sell 25%
   - Sell 50%
   - Sell 100% (Close Position)
-- [ ] Sortable columns (click header to sort)
-- [ ] Row hover effects
-- [ ] Click row → open details modal
+- [x] Sortable columns (click header to sort)
+- [x] Row hover effects
+- [x] Click row → open details modal (basic modal, full version in Task #8)
+
+**Implementation Details**:
+- Added sortable column headers (click to sort, shows ↑/↓ indicator)
+- New columns: Cost Basis, Today's P/L (separate from Total P/L)
+- Enhanced Total P/L display: shows $ amount + % in two lines
+- Color-coded P/L: green (profit) with TrendingUp icon, red (loss) with TrendingDown icon
+- Quick action buttons: 25%, 50%, All (orange for partial, red for full close)
+- Row hover effect: changes to blue-50 background
+- Click row opens basic modal with position summary
+- Confirmation dialog before selling (window.confirm)
+- Integrated with handleSellPosition → places market sell order
+- Font styling: font-mono for numbers, font-bold for symbols
+- Right-aligned numeric columns for better readability
 
 **New Table Columns**:
 ```
@@ -348,7 +361,7 @@ stream.onStockTrade((trade) => {
 
 ## 📊 Progress Tracking
 
-**Overall Progress**: 6/15 tasks completed (40%)
+**Overall Progress**: 7/15 tasks completed (46.7%)
 
 ### Week 1 (Priority 1) ✅ COMPLETE
 - [x] Stock Search (100%) ✅
@@ -362,12 +375,12 @@ stream.onStockTrade((trade) => {
 
 ### Week 2 (Priority 2) - In Progress
 - [x] TradingView Chart (100%) ✅
-- [ ] Enhanced Positions (0%)
+- [x] Enhanced Positions (100%) ✅
 - [ ] Position Details Modal (0%)
 - [ ] WebSocket Updates (0%)
 
-**Time Invested**: 4 hours
-**Status**: 1/4 Priority 2 tasks complete (25%)
+**Time Invested**: 6.5 hours
+**Status**: 2/4 Priority 2 tasks complete (50%)
 
 ### Future (Priority 3)
 - [ ] Analytics Dashboard (0%)

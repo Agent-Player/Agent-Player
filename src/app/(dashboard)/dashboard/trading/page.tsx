@@ -254,6 +254,24 @@ export default function TradingPage() {
     }
   }
 
+  async function handleSellPosition(symbol, qty) {
+    try {
+      const orderData = {
+        symbol,
+        qty,
+        side: 'sell',
+        order_type: 'market',
+        time_in_force: 'day',
+      };
+
+      await handlePlaceOrder(orderData);
+      toast.success(`Sold ${qty} shares of ${symbol}`);
+    } catch (error) {
+      console.error('Sell position error:', error);
+      toast.error('Failed to sell position');
+    }
+  }
+
   async function handleCancelOrder(orderId) {
     try {
       const res = await fetch(`${config.backendUrl}/api/ext/trading/orders/${orderId}`, {
@@ -513,7 +531,9 @@ export default function TradingPage() {
 
       {/* Tab Content */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        {activeTab === 'positions' && <PositionsTab positions={positions} />}
+        {activeTab === 'positions' && (
+          <PositionsTab positions={positions} onSellPosition={handleSellPosition} />
+        )}
         {activeTab === 'trade' && (
           <TradeTab onPlaceOrder={handlePlaceOrder} watchlist={watchlist} portfolio={portfolio} />
         )}
@@ -566,7 +586,12 @@ function MetricCard({ icon, label, value, color }) {
   );
 }
 
-function PositionsTab({ positions }) {
+function PositionsTab({ positions, onSellPosition }) {
+  const [sortBy, setSortBy] = useState('symbol'); // symbol, qty, value, pl, pl_today
+  const [sortDirection, setSortDirection] = useState('asc'); // asc, desc
+  const [selectedPosition, setSelectedPosition] = useState(null);
+  const [sellPercentage, setSellPercentage] = useState(100);
+
   if (positions.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
@@ -576,43 +601,226 @@ function PositionsTab({ positions }) {
     );
   }
 
+  // Sort positions
+  const sortedPositions = [...positions].sort((a, b) => {
+    let aValue, bValue;
+
+    switch (sortBy) {
+      case 'symbol':
+        aValue = a.symbol;
+        bValue = b.symbol;
+        break;
+      case 'qty':
+        aValue = parseFloat(a.qty);
+        bValue = parseFloat(b.qty);
+        break;
+      case 'value':
+        aValue = a.market_value;
+        bValue = b.market_value;
+        break;
+      case 'pl':
+        aValue = a.unrealized_pl;
+        bValue = b.unrealized_pl;
+        break;
+      case 'pl_today':
+        aValue = a.change_today || 0;
+        bValue = b.change_today || 0;
+        break;
+      default:
+        aValue = a.symbol;
+        bValue = b.symbol;
+    }
+
+    if (sortDirection === 'asc') {
+      return aValue > bValue ? 1 : -1;
+    } else {
+      return aValue < bValue ? 1 : -1;
+    }
+  });
+
+  // Handle column header click for sorting
+  function handleSort(column) {
+    if (sortBy === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortDirection('asc');
+    }
+  }
+
+  // Handle quick sell buttons
+  async function handleQuickSell(position, percentage) {
+    const qtyToSell = (parseFloat(position.qty) * percentage) / 100;
+    const confirm = window.confirm(
+      `Sell ${percentage}% (${qtyToSell.toFixed(2)} shares) of ${position.symbol}?`
+    );
+    if (confirm && onSellPosition) {
+      await onSellPosition(position.symbol, qtyToSell);
+    }
+  }
+
+  // Sortable column header component
+  function SortableHeader({ column, label, align = 'left' }) {
+    const isActive = sortBy === column;
+    return (
+      <th
+        className={`px-4 py-3 text-${align} text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 transition-colors`}
+        onClick={() => handleSort(column)}
+      >
+        <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>
+          <span>{label}</span>
+          {isActive && (
+            <span className="text-blue-600">
+              {sortDirection === 'asc' ? '↑' : '↓'}
+            </span>
+          )}
+        </div>
+      </th>
+    );
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
         <thead>
           <tr className="bg-gray-50">
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Symbol</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg Price</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Market Value</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">P&L</th>
+            <SortableHeader column="symbol" label="Symbol" />
+            <SortableHeader column="qty" label="Qty" align="right" />
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Entry</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Current</th>
+            <SortableHeader column="value" label="Market Value" align="right" />
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cost Basis</th>
+            <SortableHeader column="pl_today" label="Today's P/L" align="right" />
+            <SortableHeader column="pl" label="Total P/L" align="right" />
+            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {positions.map((pos) => (
-            <tr key={pos.symbol} className="hover:bg-gray-50">
-              <td className="px-4 py-3 font-medium">{pos.symbol}</td>
-              <td className="px-4 py-3">{pos.qty}</td>
-              <td className="px-4 py-3">${pos.avg_entry_price.toFixed(2)}</td>
-              <td className="px-4 py-3">${pos.current_price.toFixed(2)}</td>
-              <td className="px-4 py-3">${pos.market_value.toFixed(2)}</td>
-              <td className="px-4 py-3">
-                <div className="flex items-center gap-1">
-                  {pos.unrealized_pl >= 0 ? (
-                    <TrendingUp className="w-4 h-4 text-green-600" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4 text-red-600" />
-                  )}
-                  <span className={pos.unrealized_pl >= 0 ? 'text-green-600' : 'text-red-600'}>
-                    ${Math.abs(pos.unrealized_pl).toFixed(2)} ({pos.unrealized_plpc.toFixed(2)}%)
-                  </span>
-                </div>
-              </td>
-            </tr>
-          ))}
+          {sortedPositions.map((pos) => {
+            const costBasis = parseFloat(pos.qty) * pos.avg_entry_price;
+            const todaysPL = pos.change_today || 0; // Today's change (if available from API)
+            const todaysPLPercent = todaysPL / costBasis * 100 || 0;
+
+            return (
+              <tr
+                key={pos.symbol}
+                className="hover:bg-blue-50 transition-colors cursor-pointer"
+                onClick={() => setSelectedPosition(pos)}
+              >
+                <td className="px-4 py-3 font-bold text-gray-900">{pos.symbol}</td>
+                <td className="px-4 py-3 text-right font-mono">{parseFloat(pos.qty).toFixed(2)}</td>
+                <td className="px-4 py-3 text-right font-mono text-gray-600">
+                  ${pos.avg_entry_price.toFixed(2)}
+                </td>
+                <td className="px-4 py-3 text-right font-mono font-medium">
+                  ${pos.current_price.toFixed(2)}
+                </td>
+                <td className="px-4 py-3 text-right font-mono font-bold">
+                  ${pos.market_value.toFixed(2)}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-gray-600">
+                  ${costBasis.toFixed(2)}
+                </td>
+
+                {/* Today's P/L */}
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    {todaysPL >= 0 ? (
+                      <TrendingUp className="w-3.5 h-3.5 text-green-600" />
+                    ) : (
+                      <TrendingDown className="w-3.5 h-3.5 text-red-600" />
+                    )}
+                    <span className={`font-mono text-sm ${todaysPL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      ${Math.abs(todaysPL).toFixed(2)}
+                    </span>
+                  </div>
+                </td>
+
+                {/* Total P/L */}
+                <td className="px-4 py-3 text-right">
+                  <div className="flex flex-col items-end">
+                    <div className="flex items-center gap-1">
+                      {pos.unrealized_pl >= 0 ? (
+                        <TrendingUp className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <TrendingDown className="w-4 h-4 text-red-600" />
+                      )}
+                      <span className={`font-mono font-bold ${pos.unrealized_pl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        ${Math.abs(pos.unrealized_pl).toFixed(2)}
+                      </span>
+                    </div>
+                    <span className={`text-xs font-mono ${pos.unrealized_pl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {pos.unrealized_plpc >= 0 ? '+' : ''}{pos.unrealized_plpc.toFixed(2)}%
+                    </span>
+                  </div>
+                </td>
+
+                {/* Quick Action Buttons */}
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-center gap-1">
+                    <button
+                      onClick={() => handleQuickSell(pos, 25)}
+                      className="px-2 py-1 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded transition-colors"
+                      title="Sell 25%"
+                    >
+                      25%
+                    </button>
+                    <button
+                      onClick={() => handleQuickSell(pos, 50)}
+                      className="px-2 py-1 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded transition-colors"
+                      title="Sell 50%"
+                    >
+                      50%
+                    </button>
+                    <button
+                      onClick={() => handleQuickSell(pos, 100)}
+                      className="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors font-medium"
+                      title="Close Position (Sell 100%)"
+                    >
+                      All
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+
+      {/* Position Details Modal - Placeholder for Task #8 */}
+      {selectedPosition && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setSelectedPosition(null)}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">{selectedPosition.symbol}</h3>
+              <button
+                onClick={() => setSelectedPosition(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <p><strong>Quantity:</strong> {selectedPosition.qty} shares</p>
+              <p><strong>Avg Entry:</strong> ${selectedPosition.avg_entry_price.toFixed(2)}</p>
+              <p><strong>Current Price:</strong> ${selectedPosition.current_price.toFixed(2)}</p>
+              <p><strong>Market Value:</strong> ${selectedPosition.market_value.toFixed(2)}</p>
+              <p className={selectedPosition.unrealized_pl >= 0 ? 'text-green-600' : 'text-red-600'}>
+                <strong>Total P/L:</strong> ${selectedPosition.unrealized_pl.toFixed(2)} ({selectedPosition.unrealized_plpc.toFixed(2)}%)
+              </p>
+            </div>
+            <p className="mt-4 text-xs text-gray-500 italic">
+              Full position details modal will be added in Task #8
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
