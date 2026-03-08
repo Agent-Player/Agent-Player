@@ -23,12 +23,16 @@ export async function credentialsRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/credentials - List all credentials
+   * Pass ?decrypt=true to include decrypted values in the response
    */
   fastify.get('/api/credentials', async (request, reply) => {
-    const { userId, skillId } = request.query as {
+    const { userId, skillId, decrypt } = request.query as {
       userId?: string;
       skillId?: string;
+      decrypt?: string;
     };
+
+    const wantDecrypt = decrypt === 'true';
 
     let credentials;
 
@@ -38,18 +42,31 @@ export async function credentialsRoutes(fastify: FastifyInstance) {
       credentials = await manager.list(userId);
     }
 
-    // Remove sensitive data from response
-    const safe = credentials.map(c => ({
-      id: c.id,
-      name: c.name,
-      type: c.type,
-      description: c.description,
-      skillId: c.skillId,
-      userId: c.userId,
-      expiresAt: c.expiresAt,
-      createdAt: c.createdAt,
-      updatedAt: c.updatedAt,
-      lastUsed: c.lastUsed
+    // Remove sensitive data from response (unless decrypt=true)
+    const safe = await Promise.all(credentials.map(async c => {
+      const base: Record<string, any> = {
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        description: c.description,
+        skillId: c.skillId,
+        userId: c.userId,
+        expiresAt: c.expiresAt,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        lastUsed: c.lastUsed
+      };
+
+      // Include decrypted value if requested
+      if (wantDecrypt) {
+        try {
+          base.value = await manager.getValue(c.id);
+        } catch {
+          base.value = null;
+        }
+      }
+
+      return base;
     }));
 
     return {

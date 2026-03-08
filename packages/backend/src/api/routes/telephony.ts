@@ -38,21 +38,55 @@ export async function registerTelephonyRoutes(fastify: FastifyInstance) {
   fastify.get('/api/telephony/numbers', async (request, reply) => {
     try {
       const db = getDatabase();
+
+      // Read statistics directly from phone_numbers table (pre-computed)
       const numbers = db.prepare(`
         SELECT
-          id, phone_number as phoneNumber, friendly_name as friendlyName,
-          country_code as countryCode, capabilities, provider, provider_sid as providerSid,
-          status, monthly_cost as monthlyCost, purchased_at as purchasedAt,
-          created_at as createdAt
+          id,
+          phone_number as phoneNumber,
+          friendly_name as friendlyName,
+          country_code as countryCode,
+          capabilities,
+          provider,
+          provider_sid as providerSid,
+          status,
+          monthly_cost as monthlyCost,
+          purchased_at as purchasedAt,
+          created_at as createdAt,
+          COALESCE(total_calls, 0) as totalCalls,
+          COALESCE(total_inbound_calls, 0) as totalInboundCalls,
+          COALESCE(total_outbound_calls, 0) as totalOutboundCalls,
+          COALESCE(total_duration_seconds, 0) as totalDurationSeconds,
+          COALESCE(total_inbound_duration_seconds, 0) as totalInboundDurationSeconds,
+          COALESCE(total_outbound_duration_seconds, 0) as totalOutboundDurationSeconds,
+          COALESCE(total_cost_spent, 0) as totalCostSpent,
+          last_used_at as lastUsedAt
         FROM phone_numbers
         WHERE status != 'released'
         ORDER BY purchased_at DESC
       `).all();
 
-      // Parse JSON fields
+      // Parse JSON fields and map to expected format
       const parsed = numbers.map((n: any) => ({
-        ...n,
-        capabilities: n.capabilities ? JSON.parse(n.capabilities) : null,
+        id: n.id,
+        phone_number: n.phoneNumber,
+        friendly_name: n.friendlyName,
+        country_code: n.countryCode,
+        capabilities: n.capabilities ? n.capabilities : '{}',
+        provider_type: n.provider,
+        sid: n.providerSid,
+        status: n.status,
+        monthly_cost: n.monthlyCost,
+        purchased_at: n.purchasedAt,
+        created_at: n.createdAt,
+        total_calls: n.totalCalls || 0,
+        total_inbound_calls: n.totalInboundCalls || 0,
+        total_outbound_calls: n.totalOutboundCalls || 0,
+        total_duration_seconds: n.totalDurationSeconds || 0,
+        total_inbound_duration_seconds: n.totalInboundDurationSeconds || 0,
+        total_outbound_duration_seconds: n.totalOutboundDurationSeconds || 0,
+        total_cost_spent: n.totalCostSpent || 0,
+        last_used_at: n.lastUsedAt || null,
       }));
 
       return reply.send({ success: true, numbers: parsed });

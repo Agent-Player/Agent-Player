@@ -1,726 +1,596 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
-  Phone, PhoneIncoming, PhoneOutgoing, PhoneCall,
-  Settings, Plus, Trash2, Edit, Power, PlayCircle,
-  Clock, User, Workflow, Download, Eye, Search,
-  RefreshCw, AlertCircle, CheckCircle, XCircle
+  Phone,
+  PhoneCall,
+  MessageSquare,
+  TrendingUp,
+  Users,
+  BarChart3,
+  FileText,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Play,
+  Pause,
+  Plus,
+  Eye,
+  Megaphone,
+  Loader2,
+  Settings,
+  Key,
+  History
 } from 'lucide-react';
-import { CallPointWizard } from '@/components/telephony/CallPointWizard';
-import { PurchaseNumberDialog } from '@/components/telephony/PurchaseNumberDialog';
-import { MakeCallDialog } from '@/components/telephony/MakeCallDialog';
-import { toast } from 'sonner';
-import { config } from '@/lib/config';
+import CallCenterSettings from './settings';
+import ProviderCredentials from './provider-credentials';
 
-interface PhoneNumber {
-  id: string;
-  phone_number: string;
-  friendly_name: string | null;
-  country_code: string | null;
-  capabilities: { voice: boolean; sms: boolean; mms: boolean };
-  provider: string;
-  status: string;
-  monthly_cost: number | null;
-  purchased_at: string | null;
-}
+const BACKEND_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  ? 'http://localhost:41522'
+  : process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:41522';
 
 interface CallPoint {
   id: string;
   name: string;
-  description: string | null;
-  phone_number_id: string | null;
-  phone_number: string | null;
-  agent_id: string | null;
-  agent_name: string | null;
-  workflow_id: string | null;
-  workflow_name: string | null;
-  voice_provider: string;
-  voice_id: string;
-  language_preference: string;
-  greeting_message: string | null;
-  ivr_menu: string | null;
-  enabled: number;
-  created_at: string;
-}
-
-interface ActiveCall {
-  id: string;
-  call_point_name: string;
-  from_number: string;
-  to_number: string;
-  direction: string;
+  phone_number: string;
   status: string;
-  started_at: string;
-  duration_seconds: number | null;
+  total_calls: number;
 }
 
-interface CallSession {
+interface Campaign {
   id: string;
-  call_point_name: string | null;
-  direction: string;
-  from_number: string;
-  to_number: string;
+  name: string;
+  type: string;
   status: string;
-  started_at: string;
-  ended_at: string | null;
-  duration_seconds: number | null;
-  recording_url: string | null;
-  transcript: string | null;
+  total_contacts: number;
+  completed_calls: number;
+  interested_count: number;
 }
 
-export default function CallCenterPage() {
-  const [activeTab, setActiveTab] = useState<'call-points' | 'phone-numbers' | 'active-calls' | 'call-history' | 'settings'>('call-points');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+interface Stats {
+  totalCallPoints: number;
+  totalCalls: number;
+  activeCampaigns: number;
+  queueLength: number;
+}
 
-  // Call Points state
+export default function CallCenterDashboard() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview');
   const [callPoints, setCallPoints] = useState<CallPoint[]>([]);
-  const [showCallPointWizard, setShowCallPointWizard] = useState(false);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [stats, setStats] = useState<Stats>({
+    totalCallPoints: 0,
+    totalCalls: 0,
+    activeCampaigns: 0,
+    queueLength: 0
+  });
+  const [loading, setLoading] = useState(true);
 
-  // Phone Numbers state
-  const [phoneNumbers, setPhoneNumbers] = useState<PhoneNumber[]>([]);
-  const [showPurchaseDialog, setShowPurchaseDialog] = useState(false);
-
-  // Active Calls state
-  const [activeCalls, setActiveCalls] = useState<ActiveCall[]>([]);
-  const [showMakeCallDialog, setShowMakeCallDialog] = useState(false);
-
-  // Call History state
-  const [callSessions, setCallSessions] = useState<CallSession[]>([]);
-  const [selectedSession, setSelectedSession] = useState<CallSession | null>(null);
-
-  // Settings state
-  const [credentials, setCredentials] = useState<any>(null);
-  const [testingConnection, setTestingConnection] = useState(false);
+  // Sync tab with URL
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     loadData();
-  }, [activeTab]);
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-
+  async function loadData() {
     try {
-      switch (activeTab) {
-        case 'call-points':
-          await loadCallPoints();
-          break;
-        case 'phone-numbers':
-          await loadPhoneNumbers();
-          break;
-        case 'active-calls':
-          await loadActiveCalls();
-          break;
-        case 'call-history':
-          await loadCallHistory();
-          break;
-        case 'settings':
-          await loadSettings();
-          break;
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const [callPointsRes, campaignsRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/telephony/call-points`, { headers }),
+        fetch(`${BACKEND_URL}/api/ext/call-center/campaigns`, { headers })
+      ]);
+
+      let loadedCallPoints: CallPoint[] = [];
+      let loadedCampaigns: Campaign[] = [];
+
+      if (callPointsRes.ok) {
+        const data = await callPointsRes.json();
+        loadedCallPoints = data.callPoints || [];
+        setCallPoints(loadedCallPoints);
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load data');
+
+      if (campaignsRes.ok) {
+        const data = await campaignsRes.json();
+        loadedCampaigns = data.campaigns || [];
+        setCampaigns(loadedCampaigns);
+      }
+
+      setStats({
+        totalCallPoints: loadedCallPoints.length,
+        totalCalls: loadedCallPoints.reduce((sum, cp) => sum + (cp.total_calls || 0), 0),
+        activeCampaigns: loadedCampaigns.filter(c => c.status === 'running').length,
+        queueLength: 0
+      });
+    } catch (error) {
+      console.error('[CallCenter] Error loading data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const loadCallPoints = async () => {
-    const response = await fetch(`${config.backendUrl}/api/telephony/call-points`);
-    if (!response.ok) throw new Error('Failed to load call points');
-    const data = await response.json();
-    setCallPoints(data.callPoints || []);
-  };
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'call-points', label: 'Call Points', icon: PhoneCall },
+    { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
+    { id: 'recordings', label: 'Call History', icon: History },
+    { id: 'queue', label: 'Queue', icon: Clock },
+    { id: 'analytics', label: 'Analytics', icon: TrendingUp },
+    { id: 'templates', label: 'Templates', icon: FileText },
+    { id: 'knowledge', label: 'Knowledge', icon: MessageSquare },
+    { id: 'settings', label: 'Settings', icon: Settings }
+  ];
 
-  const loadPhoneNumbers = async () => {
-    const response = await fetch(`${config.backendUrl}/api/telephony/numbers`);
-    if (!response.ok) throw new Error('Failed to load phone numbers');
-    const data = await response.json();
-    setPhoneNumbers(data.numbers || []);
-  };
+  function handleTabChange(tabId: string) {
+    setActiveTab(tabId);
+    router.push(`?tab=${tabId}`, { scroll: false });
+  }
 
-  const loadActiveCalls = async () => {
-    const response = await fetch(`${config.backendUrl}/api/telephony/calls/active`);
-    if (!response.ok) throw new Error('Failed to load active calls');
-    const data = await response.json();
-    setActiveCalls(data.calls || []);
-  };
-
-  const loadCallHistory = async () => {
-    const response = await fetch(`${config.backendUrl}/api/telephony/sessions`);
-    if (!response.ok) throw new Error('Failed to load call history');
-    const data = await response.json();
-    setCallSessions(data.sessions || []);
-  };
-
-  const loadSettings = async () => {
-    const response = await fetch(`${config.backendUrl}/api/telephony/settings/credentials`);
-    if (!response.ok) throw new Error('Failed to load settings');
-    const data = await response.json();
-    setCredentials(data.credentials || {});
-  };
-
-  const toggleCallPoint = async (callPointId: string, currentEnabled: number) => {
-    try {
-      const response = await fetch(`${config.backendUrl}/api/telephony/call-points/${callPointId}/toggle`, {
-        method: 'PATCH',
-      });
-
-      if (!response.ok) throw new Error('Failed to toggle call point');
-
-      await loadCallPoints();
-      toast.success('Call point toggled successfully');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to toggle call point');
-    }
-  };
-
-  const deleteCallPoint = async (callPointId: string) => {
-    if (!confirm('Are you sure you want to delete this call point?')) return;
-
-    try {
-      const response = await fetch(`${config.backendUrl}/api/telephony/call-points/${callPointId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) throw new Error('Failed to delete call point');
-
-      await loadCallPoints();
-      toast.success('Call point deleted successfully');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to delete call point');
-    }
-  };
-
-  const testConnection = async (provider: string) => {
-    setTestingConnection(true);
-    try {
-      const response = await fetch(`${config.backendUrl}/api/telephony/settings/test-connection`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success(`${provider} connection successful!`);
-      } else {
-        toast.error(`${provider} connection failed: ${data.error || 'Unknown error'}`);
-      }
-    } catch (err: any) {
-      toast.error(`Connection test failed: ${err.message}`);
-    } finally {
-      setTestingConnection(false);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading Call Center...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Phone className="w-8 h-8 text-blue-600" />
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Call Center
-            </h1>
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <Phone className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Call Center</h1>
+                <p className="text-sm text-gray-600">Professional AI-powered telephony system</p>
+              </div>
+            </div>
+            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              New Campaign
+            </button>
           </div>
-          <p className="text-gray-600 dark:text-gray-400">
-            Manage phone numbers, call points, and telephony settings
-          </p>
         </div>
+      </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
-          <button
-            onClick={() => setActiveTab('call-points')}
-            className={`px-6 py-3 font-medium transition-colors ${
-              activeTab === 'call-points'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <PhoneCall className="w-4 h-4" />
-              Call Points
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        {/* Stats Cards - Only show on Overview tab */}
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-4 gap-6 mb-6">
+            <div className="bg-white p-6 rounded-xl border">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-blue-100 rounded-lg">
+                  <Phone className="w-6 h-6 text-blue-600" />
+                </div>
+                <span className="text-sm text-gray-500">Total</span>
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.totalCallPoints}</h3>
+              <p className="text-sm text-gray-600">Call Points</p>
             </div>
-          </button>
 
-          <button
-            onClick={() => setActiveTab('phone-numbers')}
-            className={`px-6 py-3 font-medium transition-colors ${
-              activeTab === 'phone-numbers'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Phone className="w-4 h-4" />
-              Phone Numbers
+            <div className="bg-white p-6 rounded-xl border">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-green-100 rounded-lg">
+                  <PhoneCall className="w-6 h-6 text-green-600" />
+                </div>
+                <span className="text-sm text-gray-500">All Time</span>
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.totalCalls}</h3>
+              <p className="text-sm text-gray-600">Total Calls</p>
             </div>
-          </button>
 
-          <button
-            onClick={() => setActiveTab('active-calls')}
-            className={`px-6 py-3 font-medium transition-colors ${
-              activeTab === 'active-calls'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <PhoneOutgoing className="w-4 h-4" />
-              Active Calls
+            <div className="bg-white p-6 rounded-xl border">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-purple-100 rounded-lg">
+                  <Megaphone className="w-6 h-6 text-purple-600" />
+                </div>
+                <span className="text-sm text-gray-500">Active</span>
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.activeCampaigns}</h3>
+              <p className="text-sm text-gray-600">Campaigns</p>
             </div>
-          </button>
 
-          <button
-            onClick={() => setActiveTab('call-history')}
-            className={`px-6 py-3 font-medium transition-colors ${
-              activeTab === 'call-history'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Call History
+            <div className="bg-white p-6 rounded-xl border">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-orange-100 rounded-lg">
+                  <Clock className="w-6 h-6 text-orange-600" />
+                </div>
+                <span className="text-sm text-gray-500">Waiting</span>
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 mb-1">{stats.queueLength}</h3>
+              <p className="text-sm text-gray-600">In Queue</p>
             </div>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`px-6 py-3 font-medium transition-colors ${
-              activeTab === 'settings'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Settings className="w-4 h-4" />
-              Settings
-            </div>
-          </button>
-        </div>
-
-        {/* Error Display */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-            <span className="text-red-800 dark:text-red-200">{error}</span>
           </div>
         )}
 
-        {/* Tab Content */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-          {activeTab === 'call-points' && (
-            <CallPointsTab
-              callPoints={callPoints}
-              loading={loading}
-              onToggle={toggleCallPoint}
-              onDelete={deleteCallPoint}
-              onRefresh={loadCallPoints}
-              onCreateNew={() => setShowCallPointWizard(true)}
-            />
-          )}
-
-          {activeTab === 'phone-numbers' && (
-            <PhoneNumbersTab
-              phoneNumbers={phoneNumbers}
-              loading={loading}
-              onRefresh={loadPhoneNumbers}
-              onPurchase={() => setShowPurchaseDialog(true)}
-            />
-          )}
-
-          {activeTab === 'active-calls' && (
-            <ActiveCallsTab
-              activeCalls={activeCalls}
-              loading={loading}
-              onRefresh={loadActiveCalls}
-              onMakeCall={() => setShowMakeCallDialog(true)}
-            />
-          )}
-
-          {activeTab === 'call-history' && (
-            <CallHistoryTab
-              callSessions={callSessions}
-              loading={loading}
-              selectedSession={selectedSession}
-              onSelectSession={setSelectedSession}
-              onRefresh={loadCallHistory}
-            />
-          )}
-
-          {activeTab === 'settings' && (
-            <SettingsTab
-              credentials={credentials}
-              loading={loading}
-              testingConnection={testingConnection}
-              onTestConnection={testConnection}
-              onRefresh={loadSettings}
-            />
-          )}
-        </div>
-
-        {/* Dialogs */}
-        <CallPointWizard
-          isOpen={showCallPointWizard}
-          onClose={() => setShowCallPointWizard(false)}
-          onSuccess={loadCallPoints}
-        />
-
-        <PurchaseNumberDialog
-          isOpen={showPurchaseDialog}
-          onClose={() => setShowPurchaseDialog(false)}
-          onSuccess={loadPhoneNumbers}
-        />
-
-        <MakeCallDialog
-          isOpen={showMakeCallDialog}
-          onClose={() => setShowMakeCallDialog(false)}
-          onSuccess={loadActiveCalls}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// Call Points Tab
-// ============================================================================
-
-interface CallPointsTabProps {
-  callPoints: CallPoint[];
-  loading: boolean;
-  onToggle: (id: string, currentEnabled: number) => void;
-  onDelete: (id: string) => void;
-  onRefresh: () => void;
-  onCreateNew: () => void;
-}
-
-function CallPointsTab({ callPoints, loading, onToggle, onDelete, onRefresh, onCreateNew }: CallPointsTabProps) {
-  return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Call Points</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={onRefresh}
-            disabled={loading}
-            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button
-            onClick={onCreateNew}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Create Call Point
-          </button>
-        </div>
-      </div>
-
-      {/* Table */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
-        </div>
-      ) : callPoints.length === 0 ? (
-        <div className="text-center py-12">
-          <PhoneCall className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400 mb-4">No call points configured yet</p>
-          <button
-            onClick={onCreateNew}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Create Your First Call Point
-          </button>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Status</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Name</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Phone Number</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Agent</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Workflow</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Voice</th>
-                <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {callPoints.map((callPoint) => (
-                <tr key={callPoint.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <td className="py-3 px-4">
+        {/* Sidebar + Content Layout */}
+        <div className="flex gap-6">
+          {/* Sidebar */}
+          <div className="w-64 flex-shrink-0">
+            <div className="bg-white rounded-xl border overflow-hidden sticky top-6">
+              <div className="p-4 border-b bg-gray-50">
+                <h3 className="font-semibold text-gray-900">Navigation</h3>
+              </div>
+              <nav className="p-2">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  return (
                     <button
-                      onClick={() => onToggle(callPoint.id, callPoint.enabled)}
-                      className={`p-2 rounded-full transition-colors ${
-                        callPoint.enabled
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      key={tab.id}
+                      onClick={() => handleTabChange(tab.id)}
+                      className={`w-full px-4 py-3 flex items-center gap-3 rounded-lg transition mb-1 ${
+                        activeTab === tab.id
+                          ? 'bg-blue-50 text-blue-600 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'
                       }`}
-                      title={callPoint.enabled ? 'Enabled - Click to disable' : 'Disabled - Click to enable'}
                     >
-                      <Power className="w-4 h-4" />
+                      <Icon className="w-5 h-5" />
+                      <span>{tab.label}</span>
                     </button>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div>
-                      <div className="font-medium text-gray-900 dark:text-white">{callPoint.name}</div>
-                      {callPoint.description && (
-                        <div className="text-sm text-gray-500 dark:text-gray-400">{callPoint.description}</div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-gray-900 dark:text-white font-mono text-sm">
-                      {callPoint.phone_number || '-'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-gray-700 dark:text-gray-300">
-                      {callPoint.agent_name || '-'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-gray-700 dark:text-gray-300">
-                      {callPoint.workflow_name || '-'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
-                      {callPoint.voice_id} ({callPoint.voice_provider})
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                        title="Edit"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => onDelete(callPoint.id)}
-                        className="p-2 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  );
+                })}
+              </nav>
+            </div>
+          </div>
+
+          {/* Content Area */}
+          <div className="flex-1 min-w-0">
+            <div className="bg-white rounded-xl border p-6">
+              {activeTab === 'overview' && <OverviewTab callPoints={callPoints} campaigns={campaigns} />}
+              {activeTab === 'call-points' && <CallPointsTab callPoints={callPoints} onRefresh={loadData} />}
+              {activeTab === 'campaigns' && <CampaignsTab campaigns={campaigns} onRefresh={loadData} />}
+              {activeTab === 'recordings' && <RecordingsTab />}
+              {activeTab === 'queue' && <QueueTab />}
+              {activeTab === 'analytics' && <AnalyticsTab />}
+              {activeTab === 'templates' && <TemplatesTab />}
+              {activeTab === 'knowledge' && <KnowledgeTab />}
+              {activeTab === 'settings' && <SettingsTab />}
+            </div>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-// ============================================================================
-// Phone Numbers Tab
-// ============================================================================
+function OverviewTab({ callPoints, campaigns }: { callPoints: CallPoint[]; campaigns: Campaign[] }) {
+  const [recentCalls, setRecentCalls] = useState<any[]>([]);
+  const [loadingCalls, setLoadingCalls] = useState(true);
 
-interface PhoneNumbersTabProps {
-  phoneNumbers: PhoneNumber[];
-  loading: boolean;
-  onRefresh: () => void;
-  onPurchase: () => void;
-}
+  useEffect(() => {
+    loadRecentCalls();
+  }, []);
 
-function PhoneNumbersTab({ phoneNumbers, loading, onRefresh, onPurchase }: PhoneNumbersTabProps) {
+  async function loadRecentCalls() {
+    try {
+      setLoadingCalls(true);
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const res = await fetch(`${BACKEND_URL}/api/ext/call-center/recordings?limit=5`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setRecentCalls(data.recordings || []);
+      }
+    } catch (error) {
+      console.error('[Overview] Load recent calls error:', error);
+    } finally {
+      setLoadingCalls(false);
+    }
+  }
+
+  function formatDuration(seconds: number) {
+    if (!seconds) return '0s';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  }
+
+  function formatTime(dateStr: string) {
+    if (!dateStr) return 'N/A';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  }
+
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Phone Numbers</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={onRefresh}
-            disabled={loading}
-            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button
-            onClick={onPurchase}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Purchase Number
-          </button>
-        </div>
-      </div>
-
-      {/* Table */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
-        </div>
-      ) : phoneNumbers.length === 0 ? (
-        <div className="text-center py-12">
-          <Phone className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400 mb-4">No phone numbers purchased yet</p>
-          <button
-            onClick={onPurchase}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Purchase Your First Number
-          </button>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Phone Number</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Friendly Name</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Country</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Capabilities</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Provider</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Status</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Monthly Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {phoneNumbers.map((number) => (
-                <tr key={number.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <td className="py-3 px-4">
-                    <span className="font-mono text-gray-900 dark:text-white">{number.phone_number}</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-gray-700 dark:text-gray-300">{number.friendly_name || '-'}</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-gray-700 dark:text-gray-300">{number.country_code || '-'}</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex gap-2">
-                      {number.capabilities?.voice && (
-                        <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded">Voice</span>
-                      )}
-                      {number.capabilities?.sms && (
-                        <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs rounded">SMS</span>
-                      )}
-                      {number.capabilities?.mms && (
-                        <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-xs rounded">MMS</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-gray-700 dark:text-gray-300 capitalize">{number.provider}</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-1 rounded text-xs ${
-                      number.status === 'active'
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400'
-                    }`}>
-                      {number.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-gray-700 dark:text-gray-300">
-                      {number.monthly_cost ? `$${number.monthly_cost.toFixed(2)}` : '-'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================================
-// Active Calls Tab
-// ============================================================================
-
-interface ActiveCallsTabProps {
-  activeCalls: ActiveCall[];
-  loading: boolean;
-  onRefresh: () => void;
-  onMakeCall: () => void;
-}
-
-function ActiveCallsTab({ activeCalls, loading, onRefresh, onMakeCall }: ActiveCallsTabProps) {
-  return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Active Calls</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={onRefresh}
-            disabled={loading}
-            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button
-            onClick={onMakeCall}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <PhoneOutgoing className="w-4 h-4" />
-            Make Call
-          </button>
-        </div>
-      </div>
-
-      {/* Content */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
-        </div>
-      ) : activeCalls.length === 0 ? (
-        <div className="text-center py-12">
-          <PhoneCall className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">No active calls</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {activeCalls.map((call) => (
-            <div key={call.id} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-              <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Phone className="w-5 h-5 text-blue-600" />
+          Recent Call Points
+        </h3>
+        <div className="space-y-3">
+          {callPoints.slice(0, 5).map((cp) => (
+            <div key={cp.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white rounded-lg border">
+                  <Phone className="w-5 h-5 text-gray-600" />
+                </div>
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    {call.direction === 'inbound' ? (
-                      <PhoneIncoming className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <PhoneOutgoing className="w-4 h-4 text-blue-600" />
-                    )}
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {call.call_point_name || 'Unknown Call Point'}
-                    </span>
+                  <h4 className="font-medium text-gray-900">{cp.name}</h4>
+                  <p className="text-sm text-gray-600">{cp.phone_number}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-gray-900">{cp.total_calls || 0}</p>
+                <p className="text-xs text-gray-600">calls</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Megaphone className="w-5 h-5 text-purple-600" />
+          Active Campaigns
+        </h3>
+        {campaigns.filter(c => c.status === 'running').length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <Megaphone className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>No active campaigns</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {campaigns.filter(c => c.status === 'running').slice(0, 5).map((campaign) => (
+              <div key={campaign.id} className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium text-gray-900">{campaign.name}</h4>
+                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+                    Running
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <span>{campaign.completed_calls}/{campaign.total_contacts} calls</span>
+                  <span>•</span>
+                  <span>{campaign.interested_count} interested</span>
+                </div>
+                <div className="mt-2 bg-white rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-purple-600 h-full transition-all"
+                    style={{ width: `${(campaign.completed_calls / campaign.total_contacts) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent Calls */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <PhoneCall className="w-5 h-5 text-green-600" />
+            Recent Calls
+          </h3>
+          <a
+            href="?tab=recordings"
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 cursor-pointer"
+          >
+            View All
+            <Eye className="w-4 h-4" />
+          </a>
+        </div>
+        {loadingCalls ? (
+          <div className="text-center py-8">
+            <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
+            <p className="text-sm text-gray-600">Loading calls...</p>
+          </div>
+        ) : recentCalls.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <PhoneCall className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p className="text-sm">No recent calls</p>
+            <p className="text-xs mt-1">Make a test call to see it here</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {recentCalls.map((call) => (
+              <a
+                key={call.id}
+                href={`?tab=settings#recording-${call.id}`}
+                className="block p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition border border-transparent hover:border-blue-200"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className={`p-2 rounded-lg ${
+                      call.direction === 'outbound'
+                        ? 'bg-blue-100'
+                        : 'bg-green-100'
+                    }`}>
+                      <PhoneCall className={`w-4 h-4 ${
+                        call.direction === 'outbound'
+                          ? 'text-blue-600'
+                          : 'text-green-600'
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          call.direction === 'outbound'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {call.direction === 'outbound' ? 'Outbound' : 'Inbound'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          call.status === 'completed'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {call.status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-900 font-medium truncate">
+                        {call.direction === 'outbound' ? call.to_number : call.from_number}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    From: <span className="font-mono">{call.from_number}</span> →
-                    To: <span className="font-mono">{call.to_number}</span>
-                  </div>
-                  <div className="text-sm text-gray-500 dark:text-gray-500 mt-1">
-                    Status: {call.status} • Duration: {call.duration_seconds || 0}s
+                  <div className="text-right ml-4">
+                    <p className="text-sm font-medium text-gray-900">{formatDuration(call.duration_seconds)}</p>
+                    <p className="text-xs text-gray-600">{formatTime(call.started_at)}</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button className="px-3 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors">
-                    Hangup
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CallPointsTab({ callPoints, onRefresh }: { callPoints: CallPoint[]; onRefresh: () => void }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-semibold text-gray-900">All Call Points</h3>
+        <button onClick={onRefresh} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+          Refresh
+        </button>
+      </div>
+      <div className="grid gap-4">
+        {callPoints.map((cp) => (
+          <div key={cp.id} className="p-4 border rounded-lg hover:bg-gray-50 transition">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-medium text-gray-900">{cp.name}</h4>
+                <p className="text-sm text-gray-600">{cp.phone_number}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <p className="text-xl font-bold text-gray-900">{cp.total_calls || 0}</p>
+                  <p className="text-xs text-gray-600">calls</p>
+                </div>
+                <button className="p-2 hover:bg-gray-100 rounded-lg transition">
+                  <Eye className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CampaignsTab({ campaigns, onRefresh }: { campaigns: Campaign[]; onRefresh: () => void }) {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'running': return 'bg-green-100 text-green-700';
+      case 'paused': return 'bg-yellow-100 text-yellow-700';
+      case 'completed': return 'bg-blue-100 text-blue-700';
+      case 'draft': return 'bg-gray-100 text-gray-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-semibold text-gray-900">All Campaigns</h3>
+        <div className="flex items-center gap-3">
+          <button onClick={onRefresh} className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition">
+            Refresh
+          </button>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            New Campaign
+          </button>
+        </div>
+      </div>
+
+      {campaigns.length === 0 ? (
+        <div className="text-center py-12 text-gray-500">
+          <Megaphone className="w-16 h-16 mx-auto mb-4 opacity-50" />
+          <p className="text-lg font-medium mb-2">No campaigns yet</p>
+          <p className="text-sm mb-4">Create your first outbound campaign to start calling customers</p>
+          <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            Create Campaign
+          </button>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {campaigns.map((campaign) => (
+            <div key={campaign.id} className="p-6 border rounded-lg hover:shadow-md transition">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-1">{campaign.name}</h4>
+                  <p className="text-sm text-gray-600">{campaign.type}</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(campaign.status)}`}>
+                  {campaign.status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Progress</p>
+                  <p className="text-xl font-bold text-gray-900">{campaign.completed_calls}/{campaign.total_contacts}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Interested</p>
+                  <p className="text-xl font-bold text-green-600">{campaign.interested_count}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Success Rate</p>
+                  <p className="text-xl font-bold text-blue-600">
+                    {campaign.completed_calls > 0 ? ((campaign.interested_count / campaign.completed_calls) * 100).toFixed(1) : 0}%
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-gray-200 rounded-full h-2 mb-4 overflow-hidden">
+                <div className="bg-blue-600 h-full transition-all" style={{ width: `${(campaign.completed_calls / campaign.total_contacts) * 100}%` }} />
+              </div>
+
+              <div className="flex items-center gap-2">
+                {campaign.status === 'running' ? (
+                  <button className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition flex items-center gap-2">
+                    <Pause className="w-4 h-4" />
+                    Pause
                   </button>
-                </div>
+                ) : campaign.status === 'paused' ? (
+                  <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
+                    <Play className="w-4 h-4" />
+                    Resume
+                  </button>
+                ) : (
+                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+                    <Play className="w-4 h-4" />
+                    Start
+                  </button>
+                )}
+                <button className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition">View Details</button>
               </div>
             </div>
           ))}
@@ -730,233 +600,429 @@ function ActiveCallsTab({ activeCalls, loading, onRefresh, onMakeCall }: ActiveC
   );
 }
 
-// ============================================================================
-// Call History Tab
-// ============================================================================
-
-interface CallHistoryTabProps {
-  callSessions: CallSession[];
-  loading: boolean;
-  selectedSession: CallSession | null;
-  onSelectSession: (session: CallSession | null) => void;
-  onRefresh: () => void;
-}
-
-function CallHistoryTab({ callSessions, loading, selectedSession, onSelectSession, onRefresh }: CallHistoryTabProps) {
+function QueueTab() {
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Call History</h2>
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
-
-      {/* Content */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
-        </div>
-      ) : callSessions.length === 0 ? (
-        <div className="text-center py-12">
-          <Clock className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">No call history yet</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Date/Time</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Direction</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">From/To</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Call Point</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Duration</th>
-                <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Status</th>
-                <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {callSessions.map((session) => (
-                <tr key={session.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
-                    {new Date(session.started_at).toLocaleString()}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-1 rounded text-xs ${
-                      session.direction === 'inbound'
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                        : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                    }`}>
-                      {session.direction}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm">
-                      <div className="font-mono text-gray-900 dark:text-white">{session.from_number}</div>
-                      <div className="font-mono text-gray-500 dark:text-gray-400">{session.to_number}</div>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
-                    {session.call_point_name || '-'}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
-                    {session.duration_seconds ? `${session.duration_seconds}s` : '-'}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-1 rounded text-xs ${
-                      session.status === 'completed'
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                        : session.status === 'failed'
-                        ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400'
-                    }`}>
-                      {session.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => onSelectSession(session)}
-                        className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                        title="View Details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <div className="text-center py-12 text-gray-500">
+      <Clock className="w-16 h-16 mx-auto mb-4 opacity-50" />
+      <p className="text-lg font-medium mb-2">Queue Monitor</p>
+      <p className="text-sm">Real-time call queue monitoring</p>
     </div>
   );
 }
 
-// ============================================================================
-// Settings Tab
-// ============================================================================
-
-interface SettingsTabProps {
-  credentials: any;
-  loading: boolean;
-  testingConnection: boolean;
-  onTestConnection: (provider: string) => void;
-  onRefresh: () => void;
+function AnalyticsTab() {
+  return (
+    <div className="text-center py-12 text-gray-500">
+      <TrendingUp className="w-16 h-16 mx-auto mb-4 opacity-50" />
+      <p className="text-lg font-medium mb-2">Analytics Dashboard</p>
+      <p className="text-sm">Detailed analytics and reports</p>
+    </div>
+  );
 }
 
-function SettingsTab({ credentials, loading, testingConnection, onTestConnection, onRefresh }: SettingsTabProps) {
+function TemplatesTab() {
   return (
-    <div className="p-6">
+    <div className="text-center py-12 text-gray-500">
+      <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
+      <p className="text-lg font-medium mb-2">Industry Templates</p>
+      <p className="text-sm">Pre-configured templates for different business types</p>
+    </div>
+  );
+}
+
+function KnowledgeTab() {
+  return (
+    <div className="text-center py-12 text-gray-500">
+      <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
+      <p className="text-lg font-medium mb-2">Knowledge Base</p>
+      <p className="text-sm">FAQ and scripts management</p>
+    </div>
+  );
+}
+
+function CredentialsTab() {
+  const [selectedProvider, setSelectedProvider] = useState<'twilio' | 'vonage' | 'microsoft_teams'>('twilio');
+
+  const providers = [
+    { id: 'twilio', name: 'Twilio', description: 'Global cloud communications platform' },
+    { id: 'vonage', name: 'Vonage', description: 'Cloud communications and APIs' },
+    { id: 'microsoft_teams', name: 'Microsoft Teams Phone', description: 'Enterprise cloud calling' }
+  ];
+
+  return (
+    <div className="max-w-4xl mx-auto">
       {/* Header */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Provider Credentials</h2>
+        <p className="text-gray-600">
+          Configure your telephony provider credentials. These will be encrypted and stored securely.
+        </p>
+      </div>
+
+      {/* Provider Selection */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-3">Select Provider</label>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {providers.map((provider) => (
+            <button
+              key={provider.id}
+              onClick={() => setSelectedProvider(provider.id as any)}
+              className={`p-4 rounded-lg border-2 transition text-left ${
+                selectedProvider === provider.id
+                  ? 'border-blue-600 bg-blue-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <h3 className="font-semibold text-gray-900 mb-1">{provider.name}</h3>
+              <p className="text-sm text-gray-600">{provider.description}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Provider Credentials Form */}
+      <ProviderCredentials
+        providerId={`provider-${selectedProvider}`}
+        providerName={selectedProvider}
+        displayName={providers.find(p => p.id === selectedProvider)?.name || ''}
+      />
+    </div>
+  );
+}
+
+function SettingsTab() {
+  const [activeSubTab, setActiveSubTab] = useState('credentials');
+
+  const subTabs = [
+    { id: 'credentials', label: 'Credentials', icon: Key },
+    { id: 'numbers', label: 'Numbers', icon: Phone },
+    { id: 'general', label: 'General', icon: Settings }
+  ];
+
+  return (
+    <div>
+      {/* Sub-tabs Header */}
+      <div className="flex gap-2 mb-6 border-b">
+        {subTabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveSubTab(tab.id)}
+              className={`px-4 py-3 flex items-center gap-2 border-b-2 transition ${
+                activeSubTab === tab.id
+                  ? 'border-blue-600 text-blue-600 font-medium'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sub-tab Content */}
+      <div>
+        {activeSubTab === 'credentials' && <CredentialsTab />}
+        {activeSubTab === 'numbers' && <CallCenterSettings />}
+        {activeSubTab === 'general' && (
+          <div className="text-center py-12 text-gray-500">
+            <Settings className="w-16 h-16 mx-auto mb-4 opacity-50" />
+            <p className="text-lg font-medium mb-2">General Settings</p>
+            <p className="text-sm">Configure call center preferences and options</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecordingsTab() {
+  const [recordings, setRecordings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [selectedRecording, setSelectedRecording] = useState<any>(null);
+
+  useEffect(() => {
+    loadRecordings();
+  }, []);
+
+  async function loadRecordings() {
+    try {
+      setLoading(true);
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const res = await fetch(`${BACKEND_URL}/api/ext/call-center/recordings?limit=100`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setRecordings(data.recordings || []);
+        setTotal(data.total || 0);
+      }
+    } catch (error) {
+      console.error('[Recordings] Load error:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function formatDuration(seconds: number) {
+    if (!seconds) return '0s';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+  }
+
+  function formatDate(dateStr: string) {
+    if (!dateStr) return 'N/A';
+    const date = new Date(dateStr);
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
+        <p className="text-gray-600">Loading recordings...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Telephony Settings</h2>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Call History</h3>
+          <p className="text-sm text-gray-600">Total: {total} calls</p>
+        </div>
         <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+          onClick={loadRecordings}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+      {recordings.length === 0 ? (
+        <div className="text-center py-12 text-gray-500">
+          <PhoneCall className="w-16 h-16 mx-auto mb-4 opacity-50" />
+          <p className="text-lg font-medium mb-2">No Calls Yet</p>
+          <p className="text-sm">Make some test calls to see them here</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* Twilio Settings */}
-          <div className="p-6 border border-gray-200 dark:border-gray-700 rounded-lg">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Twilio</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Primary telephony provider
-                </p>
+        <div className="space-y-4">
+          {recordings.map((rec) => (
+            <div
+              key={rec.id}
+              className="bg-white border rounded-xl p-5 hover:shadow-md transition"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      rec.direction === 'outbound'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {rec.direction === 'outbound' ? 'Outbound' : 'Inbound'}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      rec.status === 'completed'
+                        ? 'bg-green-100 text-green-700'
+                        : rec.status === 'failed'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {rec.status}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">From:</span>
+                      <span className="ml-2 font-medium text-gray-900">{rec.from_number}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">To:</span>
+                      <span className="ml-2 font-medium text-gray-900">{rec.to_number}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Duration:</span>
+                      <span className="ml-2 font-medium text-gray-900">{formatDuration(rec.duration_seconds)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Started:</span>
+                      <span className="ml-2 font-medium text-gray-900">{formatDate(rec.started_at)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              {credentials?.twilio?.configured ? (
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              ) : (
-                <XCircle className="w-6 h-6 text-gray-400" />
-              )}
-            </div>
 
-            {credentials?.twilio?.configured ? (
-              <div className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Account SID</label>
-                  <div className="mt-1 font-mono text-sm text-gray-600 dark:text-gray-400">
-                    {credentials.twilio.accountSid}
-                  </div>
+              {/* Transcript */}
+              {rec.transcript && (
+                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Transcript
+                  </h4>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{rec.transcript}</p>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Auth Token</label>
-                  <div className="mt-1 font-mono text-sm text-gray-600 dark:text-gray-400">
-                    {credentials.twilio.authToken || '••••••••••••••••'}
-                  </div>
-                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex items-center gap-3 pt-4 border-t">
+                {rec.recording_url && (
+                  <a
+                    href={rec.recording_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    Play Recording
+                  </a>
+                )}
                 <button
-                  onClick={() => onTestConnection('twilio')}
-                  disabled={testingConnection}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  onClick={() => setSelectedRecording(rec)}
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition flex items-center gap-2"
                 >
-                  {testingConnection ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <PlayCircle className="w-4 h-4" />
-                  )}
-                  Test Connection
+                  <Eye className="w-4 h-4" />
+                  View Details
                 </button>
               </div>
-            ) : (
-              <div className="text-center py-6">
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  No Twilio credentials configured
-                </p>
-                <a
-                  href="/dashboard/settings/credentials"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
-                >
-                  <Settings className="w-4 h-4" />
-                  Configure Credentials
-                </a>
-              </div>
-            )}
-          </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-          {/* Google Voice Settings */}
-          <div className="p-6 border border-gray-200 dark:border-gray-700 rounded-lg">
+      {/* Recording Details Modal */}
+      {selectedRecording && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedRecording(null)}
+        >
+          <div
+            className="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Google Voice</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Alternative telephony provider
-                </p>
-              </div>
-              {credentials?.google?.configured ? (
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              ) : (
-                <XCircle className="w-6 h-6 text-gray-400" />
-              )}
+              <h3 className="text-xl font-bold text-gray-900">Call Details</h3>
+              <button
+                onClick={() => setSelectedRecording(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition"
+              >
+                <XCircle className="w-5 h-5 text-gray-600" />
+              </button>
             </div>
 
-            <div className="text-center py-6">
-              <p className="text-gray-600 dark:text-gray-400 mb-2">
-                Google Voice integration coming soon
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-500">
-                Use Twilio for now
-              </p>
+            <div className="space-y-4">
+              {/* Main Call Info */}
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-600 font-medium">Call SID:</span>
+                  <p className="text-gray-900 mt-1 font-mono text-xs break-all">{selectedRecording.call_sid}</p>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">Direction:</span>
+                  <p className="text-gray-900 mt-1 capitalize">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      selectedRecording.direction === 'outbound'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {selectedRecording.direction}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">From:</span>
+                  <p className="text-gray-900 mt-1">{selectedRecording.from_number}</p>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">To:</span>
+                  <p className="text-gray-900 mt-1">{selectedRecording.to_number}</p>
+                </div>
+                {selectedRecording.phone_friendly_name && (
+                  <div>
+                    <span className="text-gray-600 font-medium">Phone Name:</span>
+                    <p className="text-gray-900 mt-1">{selectedRecording.phone_friendly_name}</p>
+                  </div>
+                )}
+                {selectedRecording.caller_name && (
+                  <div>
+                    <span className="text-gray-600 font-medium">Caller Name:</span>
+                    <p className="text-gray-900 mt-1">{selectedRecording.caller_name}</p>
+                  </div>
+                )}
+                <div>
+                  <span className="text-gray-600 font-medium">Status:</span>
+                  <p className="text-gray-900 mt-1 capitalize">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      selectedRecording.status === 'completed'
+                        ? 'bg-green-100 text-green-700'
+                        : selectedRecording.status === 'failed'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {selectedRecording.status}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">Duration:</span>
+                  <p className="text-gray-900 mt-1 font-semibold">{formatDuration(selectedRecording.duration_seconds)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">Started:</span>
+                  <p className="text-gray-900 mt-1">{formatDate(selectedRecording.started_at)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">Ended:</span>
+                  <p className="text-gray-900 mt-1">{formatDate(selectedRecording.ended_at)}</p>
+                </div>
+              </div>
+
+              {/* Technical Details */}
+              <div className="pt-4 border-t">
+                <h4 className="font-semibold text-gray-900 mb-3 text-sm">Technical Details</h4>
+                <div className="grid grid-cols-1 gap-3 text-xs">
+                  <div className="bg-gray-50 p-3 rounded">
+                    <span className="text-gray-600 font-medium">Call ID:</span>
+                    <p className="text-gray-900 mt-1 font-mono break-all">{selectedRecording.id}</p>
+                  </div>
+                  {selectedRecording.phone_number_id && (
+                    <div className="bg-gray-50 p-3 rounded">
+                      <span className="text-gray-600 font-medium">Phone Number ID:</span>
+                      <p className="text-gray-900 mt-1 font-mono break-all">{selectedRecording.phone_number_id}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {selectedRecording.recording_url && (
+                <div className="pt-4 border-t">
+                  <h4 className="font-semibold text-gray-900 mb-3">Recording</h4>
+                  <audio controls className="w-full">
+                    <source src={selectedRecording.recording_url} type="audio/mpeg" />
+                    Your browser does not support the audio element.
+                  </audio>
+                </div>
+              )}
+
+              {selectedRecording.transcript && (
+                <div className="pt-4 border-t">
+                  <h4 className="font-semibold text-gray-900 mb-3">Transcript</h4>
+                  <div className="p-4 bg-gray-50 rounded-lg max-h-60 overflow-y-auto">
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedRecording.transcript}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

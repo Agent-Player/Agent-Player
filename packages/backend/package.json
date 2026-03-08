@@ -20,6 +20,7 @@
     "agent": "dist/cli/index.js"
   },
   "scripts": {
+    "predev": "node scripts/kill-port.js",
     "dev": "tsx watch src/api/server.ts",
     "build": "tsc",
     "start": "node dist/api/server.js",

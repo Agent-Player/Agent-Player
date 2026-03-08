@@ -1,6 +1,6 @@
 # Call Center Extension
 
-AI-powered call center with full telephony capabilities using Twilio and Google Voice.
+Professional AI-powered call center with multi-provider support (Twilio, Microsoft Teams Phone, Vonage).
 
 ## Overview
 
@@ -8,14 +8,88 @@ This extension enables your AI agents to handle phone calls, both inbound and ou
 
 ## Features
 
+- ✅ **Multi-Provider Support**: Twilio, Microsoft Teams Phone, Vonage
 - ✅ **Inbound Call Handling**: Receive calls on purchased phone numbers
 - ✅ **Outbound Calling**: Make calls to customers/users
 - ✅ **IVR Menu Builder**: Create press-1-for-X menus
 - ✅ **Call Recording**: Automatic recording with transcription
+- ✅ **Call Analytics**: Sentiment analysis, CSAT surveys, cost tracking
+- ✅ **Queue Management**: VIP priority, estimated wait times
 - ✅ **AI Agent Integration**: AI handles conversations naturally
+- ✅ **Industry Templates**: Pre-configured setups for support, sales, restaurant, medical, etc.
+- ✅ **Knowledge Base**: FAQ and scripts per call point
 - ✅ **Workflow Automation**: Trigger workflows based on call events
 - ✅ **Multi-language**: Auto-detect or force language (Arabic/English)
 - ✅ **Business Hours**: Route calls differently based on time
+
+## Supported Providers
+
+### Twilio (Primary)
+- **Coverage**: 100+ countries
+- **Voice**: $0.013/min (US)
+- **Numbers**: $1/month (US)
+- **Best for**: Worldwide availability, reliable
+
+### Microsoft Teams Phone
+- **Coverage**: Enterprise customers with Microsoft 365
+- **Voice**: Included in Calling Plan ($12-15/user/month)
+- **Best for**: Businesses already using Microsoft Teams
+
+### Vonage
+- **Coverage**: 100+ countries
+- **Voice**: $0.0084/min (US)
+- **Numbers**: $0.90/month (US)
+- **Best for**: Cost-effective alternative to Twilio
+
+## Quick Start
+
+### 1. Access Dashboard
+Navigate to: http://localhost:41521/dashboard/call-center
+
+### 2. Configure Provider Credentials
+
+**Go to Credentials tab:**
+1. Select provider from dropdown (e.g., "Twilio - $0.013/min")
+2. Enter API credentials:
+   - **Twilio**: Account SID, Auth Token, Phone Number (optional)
+   - **Microsoft Teams**: Tenant ID, Client ID, Client Secret
+   - **Vonage**: API Key, API Secret, Application ID (optional)
+3. Click **"Save Credentials"**
+4. ✅ Provider is auto-enabled and set as default
+
+### 3. Purchase Phone Number
+
+**Option A: From Provider Console (Recommended)**
+- [Twilio Console](https://www.twilio.com/console/phone-numbers/search)
+- [Vonage Dashboard](https://dashboard.nexmo.com/buy-numbers)
+- Purchase a number with Voice capability
+
+**Option B: From Dashboard**
+- Go to **"My Numbers"** tab
+- Numbers purchased from provider console will appear here automatically
+
+### 4. Test Outbound Calls
+
+**No webhook configuration needed for testing!**
+
+Use the AI agent's `make_call` tool or call the API directly:
+
+```bash
+curl -X POST http://localhost:41522/api/ext/call-center/make-call \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "to": "+1234567890",
+    "message": "Hello, this is a test call from your AI assistant"
+  }'
+```
+
+### 5. Deploy to Production (Optional)
+
+When ready to handle inbound calls:
+1. Deploy backend to server
+2. Update Twilio webhook URL (see Webhooks section below)
+3. Test inbound calls
 
 ## Supported Countries
 
@@ -143,24 +217,58 @@ npm install @google-cloud/text-to-speech
 
 ## Webhooks (How Calls Connect)
 
-Twilio needs to send data to your server when calls happen. The extension automatically configures these URLs when you purchase a number:
+### Development (localhost)
+
+**For local testing, keep Twilio's demo webhook - no changes needed!**
 
 ```
-Voice Webhook:     https://your-domain.com/api/telephony/voice-webhook
-Status Callback:   https://your-domain.com/api/telephony/status-webhook
-Recording Webhook: https://your-domain.com/api/telephony/recording-webhook
+Voice Webhook URL: https://demo.twilio.com/welcome/voice/
 ```
 
-**For local development:**
+**Benefits:**
+- No ngrok/tunnel needed for initial testing
+- Works immediately with outbound calls
+- Inbound calls play demo message
+- Perfect for testing API integration
+
+### Production Deployment
+
+When deploying to a server, update the webhook URL in Twilio Console:
+
+**Steps:**
+1. Go to: https://console.twilio.com/
+2. Navigate to: **Phone Numbers → Manage → Active Numbers**
+3. Select your phone number
+4. Under **"Voice Configuration"**:
+   - Change "A call comes in" webhook URL **from:**
+     ```
+     https://demo.twilio.com/welcome/voice/
+     ```
+   - **To your production URL:**
+     ```
+     https://yourdomain.com/api/ext/call-center/webhooks/voice
+     ```
+5. Click **"Save configuration"**
+
+**Webhook Endpoints:**
+```
+Voice:      POST /api/ext/call-center/webhooks/voice
+Status:     POST /api/ext/call-center/webhooks/status
+Recording:  POST /api/ext/call-center/webhooks/recording
+```
+
+**Alternative for localhost testing (advanced):**
+
+If you need to test inbound calls locally:
+
 ```bash
-# Install ngrok
-npm install -g ngrok
-
-# Expose your local server
+# Option 1: ngrok
 ngrok http 41522
+# → https://abc123.ngrok.io/api/ext/call-center/webhooks/voice
 
-# Copy the https URL (e.g., https://abc123.ngrok.io)
-# Paste it in Call Center Settings → "Public URL"
+# Option 2: Cloudflare Tunnel (free, stable)
+cloudflared tunnel --url http://localhost:41522
+# → https://xyz.trycloudflare.com/api/ext/call-center/webhooks/voice
 ```
 
 ## Cost Breakdown (Twilio Pricing)
