@@ -36,6 +36,28 @@ A comprehensive AI Agent **platform & framework** with **3D avatars**, **interac
 - 🧠 **Any LLM** - Claude, GPT, or local models
 - 🌐 **Website Core** - Use as foundation for your platform
 
+---
+
+## 📸 Screenshots
+
+### AI Avatar Companion
+![AI Avatar Companion](docs/images/avatar-viewer.png)
+*Your AI companion sees you, hears you, and interacts naturally through 3D avatars*
+
+### Trading Dashboard
+![Trading Dashboard](docs/images/alpaca.png)
+*Professional stock & crypto trading powered by Alpaca API*
+
+### Dashboard Control Panel
+![Control Panel](docs/images/panel1.jpg)
+*Comprehensive dashboard for managing agents, tasks, and integrations*
+
+### Multiple Avatars
+![Avatar Gallery](docs/images/avatars.webp)
+*Choose from Ready Player Me, Mixamo, or upload custom 3D characters*
+
+---
+
 ## 🎯 Key Features
 
 - **👥 Your AI Companion Everywhere** - Mobile, desktop, TV - your AI friend appears wherever you need with live interactive notifications
@@ -131,9 +153,6 @@ Agent Player gives you a **close personal AI companion** that appears wherever y
 - 📺 **TV/Screens** - Display on any screen you want
 - 🔔 **Live Interactive Notifications** - Real-time alerts with voice and avatar responses
 
-![AI Avatar Companion](docs/images/avatar-viewer.png)
-*Your AI companion sees you, hears you, and interacts naturally through 3D avatars*
-
 ### 🤝 AI-Enhanced Collaboration (Not Replacement)
 Agent Player **doesn't work 100% autonomously** deleting or adding messages without you. Instead:
 - ✅ **You work WITH the AI** - Enhance your capabilities
@@ -175,21 +194,6 @@ Agent Player is the **next-generation agent platform** you need:
 - **🔒 Privacy First** - Run completely locally if you want
 - **🧑‍💻 No Technical Skills Required** - Designed for non-developers too
 - **🌐 Open Source** - Fully transparent, modify as you wish
-
----
-
-
-### Trading Dashboard
-![Trading Dashboard](docs/images/alpaca.png)
-*Professional stock & crypto trading powered by Alpaca API*
-
-### Dashboard Control Panel
-![Control Panel](docs/images/panel1.jpg)
-*Comprehensive dashboard for managing agents, tasks, and integrations*
-
-### Multiple Avatars
-![Avatar Gallery](docs/images/avatars.webp)
-*Choose from Ready Player Me, Mixamo, or upload custom 3D characters*
 
 ---
 

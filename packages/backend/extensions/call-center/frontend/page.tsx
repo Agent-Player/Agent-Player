@@ -22,8 +22,16 @@ import {
   Loader2,
   Settings,
   Key,
-  History
+  History,
+  Filter,
+  Download,
+  RefreshCw,
+  Search,
+  X,
+  PhoneIncoming,
+  PhoneOutgoing
 } from 'lucide-react';
+import { toast } from 'sonner';
 import CallCenterSettings from './settings';
 import ProviderCredentials from './provider-credentials';
 import CallDetailsPage from './call-details';
@@ -61,12 +69,7 @@ export default function CallCenterDashboard() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // Check if we should show call details page
-  const callId = searchParams.get('callId');
-  if (callId) {
-    return <CallDetailsPage callId={callId} />;
-  }
-
+  // All Hooks must come BEFORE any conditional returns
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview');
   const [callPoints, setCallPoints] = useState<CallPoint[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -77,6 +80,12 @@ export default function CallCenterDashboard() {
     queueLength: 0
   });
   const [loading, setLoading] = useState(true);
+
+  // Check if we should show call details page (AFTER all Hooks)
+  const callId = searchParams.get('callId');
+  if (callId) {
+    return <CallDetailsPage callId={callId} />;
+  }
 
   // Sync tab with URL
   useEffect(() => {
@@ -748,26 +757,31 @@ function SettingsTab() {
 
 function RecordingsTab() {
   const [recordings, setRecordings] = useState<any[]>([]);
+  const [filteredRecordings, setFilteredRecordings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
-  const [selectedRecording, setSelectedRecording] = useState<any>(null);
+
+  // Filters state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [directionFilter, setDirectionFilter] = useState('all');
+  const [dateRange, setDateRange] = useState('all'); // all, today, week, month
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(25);
 
   useEffect(() => {
     loadRecordings();
   }, []);
 
-  // Removed hash-based deep linking - now using dedicated page
+  useEffect(() => {
+    applyFilters();
+  }, [recordings, searchQuery, statusFilter, directionFilter, dateRange]);
 
-  // Function to open recording with URL update
   function openRecording(recording: any) {
-    // Navigate to dedicated call details page
     window.location.href = `/dashboard/ext/call-center?callId=${recording.id}`;
-  }
-
-  // Function to close recording
-  function closeRecording() {
-    window.history.pushState('', document.title, window.location.pathname + window.location.search);
-    setSelectedRecording(null);
   }
 
   async function loadRecordings() {
@@ -777,11 +791,11 @@ function RecordingsTab() {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
-      const res = await fetch(`${BACKEND_URL}/api/ext/call-center/recordings?limit=100`, { headers });
+      const res = await fetch(`${BACKEND_URL}/api/ext/call-center/recordings?limit=1000`, { headers });
       if (res.ok) {
         const data = await res.json();
         setRecordings(data.recordings || []);
-        setTotal(data.total || 0);
+        setTotal(data.recordings?.length || 0);
       }
     } catch (error) {
       console.error('[Recordings] Load error:', error);
@@ -790,265 +804,442 @@ function RecordingsTab() {
     }
   }
 
+  function applyFilters() {
+    let filtered = [...recordings];
+
+    // Search filter (Call SID, phone numbers)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(rec =>
+        rec.call_sid?.toLowerCase().includes(query) ||
+        rec.from_number?.toLowerCase().includes(query) ||
+        rec.to_number?.toLowerCase().includes(query) ||
+        rec.id?.toLowerCase().includes(query)
+      );
+    }
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(rec => rec.status === statusFilter);
+    }
+
+    // Direction filter
+    if (directionFilter !== 'all') {
+      filtered = filtered.filter(rec => rec.direction === directionFilter);
+    }
+
+    // Date range filter
+    if (dateRange !== 'all') {
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      filtered = filtered.filter(rec => {
+        const recDate = new Date(rec.started_at);
+        if (dateRange === 'today') return recDate >= startOfToday;
+        if (dateRange === 'week') return recDate >= startOfWeek;
+        if (dateRange === 'month') return recDate >= startOfMonth;
+        return true;
+      });
+    }
+
+    setFilteredRecordings(filtered);
+    setCurrentPage(1); // Reset to first page when filters change
+  }
+
+  function exportToCSV() {
+    const headers = ['Call SID', 'Date/Time', 'Status', 'Direction', 'From', 'To', 'Duration', 'Provider'];
+    const rows = filteredRecordings.map(rec => [
+      rec.call_sid || rec.id,
+      new Date(rec.started_at).toLocaleString(),
+      rec.status,
+      rec.direction,
+      rec.from_number,
+      rec.to_number,
+      formatDuration(rec.duration_seconds),
+      rec.provider || 'N/A'
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `call-logs-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    toast.success('CSV exported successfully');
+  }
+
   function formatDuration(seconds: number) {
     if (!seconds) return '0s';
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}m ${secs}s`;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   }
 
-  function formatDate(dateStr: string) {
+  function formatDateTime(dateStr: string) {
     if (!dateStr) return 'N/A';
     const date = new Date(dateStr);
     return date.toLocaleString('en-US', {
+      year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      second: '2-digit'
     });
   }
+
+  function clearFilters() {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setDirectionFilter('all');
+    setDateRange('all');
+    toast.success('Filters cleared');
+  }
+
+  // Pagination
+  const totalPages = Math.ceil(filteredRecordings.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentRecordings = filteredRecordings.slice(startIndex, endIndex);
 
   if (loading) {
     return (
       <div className="text-center py-12">
         <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
-        <p className="text-gray-600">Loading recordings...</p>
+        <p className="text-gray-600">Loading call logs...</p>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      {/* Header with Actions */}
+      <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Call History</h3>
-          <p className="text-sm text-gray-600">Total: {total} calls</p>
+          <h3 className="text-xl font-bold text-gray-900">Call Logs</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            {filteredRecordings.length} of {total} calls
+            {(searchQuery || statusFilter !== 'all' || directionFilter !== 'all' || dateRange !== 'all') && ' (filtered)'}
+          </p>
         </div>
-        <button
-          onClick={loadRecordings}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center gap-2"
+          >
+            <Filter className="w-4 h-4" />
+            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          </button>
+          <button
+            onClick={exportToCSV}
+            disabled={filteredRecordings.length === 0}
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
+          <button
+            onClick={loadRecordings}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {recordings.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <PhoneCall className="w-16 h-16 mx-auto mb-4 opacity-50" />
-          <p className="text-lg font-medium mb-2">No Calls Yet</p>
-          <p className="text-sm">Make some test calls to see them here</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {recordings.map((rec) => (
-            <div
-              key={rec.id}
-              onClick={() => openRecording(rec)}
-              className="bg-white border rounded-xl p-5 hover:shadow-lg hover:border-blue-300 transition cursor-pointer"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      rec.direction === 'outbound'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-green-100 text-green-700'
-                    }`}>
-                      {rec.direction === 'outbound' ? 'Outbound' : 'Inbound'}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      rec.status === 'completed'
-                        ? 'bg-green-100 text-green-700'
-                        : rec.status === 'failed'
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}>
-                      {rec.status}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-600">From:</span>
-                      <span className="ml-2 font-medium text-gray-900">{rec.from_number}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">To:</span>
-                      <span className="ml-2 font-medium text-gray-900">{rec.to_number}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Duration:</span>
-                      <span className="ml-2 font-medium text-gray-900">{formatDuration(rec.duration_seconds)}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Started:</span>
-                      <span className="ml-2 font-medium text-gray-900">{formatDate(rec.started_at)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+      {/* Filters Panel */}
+      {showFilters && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Date Range */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
+              <select
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="week">Last 7 Days</option>
+                <option value="month">This Month</option>
+              </select>
+            </div>
 
-              {/* Transcript */}
-              {rec.transcript && (
-                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
-                    Transcript
-                  </h4>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{rec.transcript}</p>
-                </div>
-              )}
+            {/* Status */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Status</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+                <option value="busy">Busy</option>
+                <option value="no-answer">No Answer</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-3 pt-4 border-t" onClick={(e) => e.stopPropagation()}>
-                {rec.recording_url && (
-                  <a
-                    href={rec.recording_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
-                  >
-                    <Play className="w-4 h-4" />
-                    Play Recording
-                  </a>
-                )}
-                <button
-                  onClick={() => openRecording(rec)}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition flex items-center gap-2"
-                >
-                  <Eye className="w-4 h-4" />
-                  View Details
-                </button>
+            {/* Direction */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Direction</label>
+              <select
+                value={directionFilter}
+                onChange={(e) => setDirectionFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Directions</option>
+                <option value="inbound">Inbound</option>
+                <option value="outbound">Outbound</option>
+              </select>
+            </div>
+
+            {/* Search */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Call SID, Phone number..."
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
             </div>
-          ))}
+          </div>
+
+          {/* Clear Filters Button */}
+          {(searchQuery || statusFilter !== 'all' || directionFilter !== 'all' || dateRange !== 'all') && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <button
+                onClick={clearFilters}
+                className="px-4 py-2 text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                Clear All Filters
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Recording Details Modal */}
-      {selectedRecording && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => closeRecording()}
-        >
-          <div
-            className="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Call Details</h3>
-              <button
-                onClick={() => closeRecording()}
-                className="p-2 hover:bg-gray-100 rounded-lg transition"
-              >
-                <XCircle className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
+      {/* Call Logs Table */}
+      {filteredRecordings.length === 0 ? (
+        <div className="text-center py-12 bg-white border border-gray-200 rounded-xl">
+          <PhoneCall className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+          <p className="text-lg font-medium text-gray-900 mb-2">No Calls Found</p>
+          <p className="text-sm text-gray-600">
+            {recordings.length === 0 ? 'Make some test calls to see them here' : 'Try adjusting your filters'}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Call SID & Date
+                    </th>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Direction
+                    </th>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      From
+                    </th>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      To
+                    </th>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Duration
+                    </th>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Recording
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {currentRecordings.map((rec) => (
+                    <tr
+                      key={rec.id}
+                      onClick={() => openRecording(rec)}
+                      className="hover:bg-blue-50 cursor-pointer transition"
+                    >
+                      {/* Call SID & Date */}
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="text-sm font-mono text-blue-600 hover:underline">
+                            {rec.call_sid || rec.id.substring(0, 16) + '...'}
+                          </p>
+                          <p className="text-xs text-gray-600 mt-1">{formatDateTime(rec.started_at)}</p>
+                        </div>
+                      </td>
 
-            <div className="space-y-4">
-              {/* Main Call Info */}
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600 font-medium">Call SID:</span>
-                  <p className="text-gray-900 mt-1 font-mono text-xs break-all">{selectedRecording.call_sid}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 font-medium">Direction:</span>
-                  <p className="text-gray-900 mt-1 capitalize">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      selectedRecording.direction === 'outbound'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-green-100 text-green-700'
-                    }`}>
-                      {selectedRecording.direction}
-                    </span>
-                  </p>
-                </div>
-                <div>
-                  <span className="text-gray-600 font-medium">From:</span>
-                  <p className="text-gray-900 mt-1">{selectedRecording.from_number}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 font-medium">To:</span>
-                  <p className="text-gray-900 mt-1">{selectedRecording.to_number}</p>
-                </div>
-                {selectedRecording.phone_friendly_name && (
-                  <div>
-                    <span className="text-gray-600 font-medium">Phone Name:</span>
-                    <p className="text-gray-900 mt-1">{selectedRecording.phone_friendly_name}</p>
-                  </div>
-                )}
-                {selectedRecording.caller_name && (
-                  <div>
-                    <span className="text-gray-600 font-medium">Caller Name:</span>
-                    <p className="text-gray-900 mt-1">{selectedRecording.caller_name}</p>
-                  </div>
-                )}
-                <div>
-                  <span className="text-gray-600 font-medium">Status:</span>
-                  <p className="text-gray-900 mt-1 capitalize">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      selectedRecording.status === 'completed'
-                        ? 'bg-green-100 text-green-700'
-                        : selectedRecording.status === 'failed'
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}>
-                      {selectedRecording.status}
-                    </span>
-                  </p>
-                </div>
-                <div>
-                  <span className="text-gray-600 font-medium">Duration:</span>
-                  <p className="text-gray-900 mt-1 font-semibold">{formatDuration(selectedRecording.duration_seconds)}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 font-medium">Started:</span>
-                  <p className="text-gray-900 mt-1">{formatDate(selectedRecording.started_at)}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 font-medium">Ended:</span>
-                  <p className="text-gray-900 mt-1">{formatDate(selectedRecording.ended_at)}</p>
-                </div>
-              </div>
+                      {/* Status */}
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          rec.status === 'completed'
+                            ? 'bg-green-100 text-green-700'
+                            : rec.status === 'failed'
+                            ? 'bg-red-100 text-red-700'
+                            : rec.status === 'busy'
+                            ? 'bg-orange-100 text-orange-700'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {rec.status}
+                        </span>
+                      </td>
 
-              {/* Technical Details */}
-              <div className="pt-4 border-t">
-                <h4 className="font-semibold text-gray-900 mb-3 text-sm">Technical Details</h4>
-                <div className="grid grid-cols-1 gap-3 text-xs">
-                  <div className="bg-gray-50 p-3 rounded">
-                    <span className="text-gray-600 font-medium">Call ID:</span>
-                    <p className="text-gray-900 mt-1 font-mono break-all">{selectedRecording.id}</p>
-                  </div>
-                  {selectedRecording.phone_number_id && (
-                    <div className="bg-gray-50 p-3 rounded">
-                      <span className="text-gray-600 font-medium">Phone Number ID:</span>
-                      <p className="text-gray-900 mt-1 font-mono break-all">{selectedRecording.phone_number_id}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+                      {/* Direction */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          {rec.direction === 'inbound' ? (
+                            <>
+                              <PhoneIncoming className="w-4 h-4 text-green-600" />
+                              <span className="text-sm text-gray-900">Inbound</span>
+                            </>
+                          ) : (
+                            <>
+                              <PhoneOutgoing className="w-4 h-4 text-blue-600" />
+                              <span className="text-sm text-gray-900">Outbound</span>
+                            </>
+                          )}
+                        </div>
+                      </td>
 
-              {selectedRecording.recording_url && (
-                <div className="pt-4 border-t">
-                  <h4 className="font-semibold text-gray-900 mb-3">Recording</h4>
-                  <audio controls className="w-full">
-                    <source src={selectedRecording.recording_url} type="audio/mpeg" />
-                    Your browser does not support the audio element.
-                  </audio>
-                </div>
-              )}
+                      {/* From */}
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{rec.from_number}</p>
+                          {rec.caller_name && (
+                            <p className="text-xs text-gray-600">{rec.caller_name}</p>
+                          )}
+                        </div>
+                      </td>
 
-              {selectedRecording.transcript && (
-                <div className="pt-4 border-t">
-                  <h4 className="font-semibold text-gray-900 mb-3">Transcript</h4>
-                  <div className="p-4 bg-gray-50 rounded-lg max-h-60 overflow-y-auto">
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedRecording.transcript}</p>
-                  </div>
-                </div>
-              )}
+                      {/* To */}
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{rec.to_number}</p>
+                          {rec.phone_friendly_name && (
+                            <p className="text-xs text-gray-600">{rec.phone_friendly_name}</p>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Duration */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-900">{formatDuration(rec.duration_seconds)}</span>
+                        </div>
+                      </td>
+
+                      {/* Recording */}
+                      <td className="px-6 py-4">
+                        {rec.recording_url ? (
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={rec.recording_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="p-2 hover:bg-blue-100 rounded-lg transition"
+                              title="Play Recording"
+                            >
+                              <Play className="w-4 h-4 text-blue-600" />
+                            </a>
+                            <a
+                              href={rec.recording_url}
+                              download
+                              onClick={(e) => e.stopPropagation()}
+                              className="p-2 hover:bg-gray-100 rounded-lg transition"
+                              title="Download Recording"
+                            >
+                              <Download className="w-4 h-4 text-gray-600" />
+                            </a>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 bg-white border border-gray-200 rounded-xl">
+              <p className="text-sm text-gray-600">
+                Showing {startIndex + 1} to {Math.min(endIndex, filteredRecordings.length)} of {filteredRecordings.length} calls
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  Previous
+                </button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 py-2 rounded-lg transition ${
+                          currentPage === pageNum
+                            ? 'bg-blue-600 text-white'
+                            : 'border border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
